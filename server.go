@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -24,38 +23,40 @@ func sendReply(ip string, incomingPayload []byte) []byte {
 		if !exists {
 			record = MsgRecord{
 				LastMsgIp:        ip,
-				LastMsgEncrypted: []byte{},
+				LastMsgEncrypted: key,
 				LastMsgTimestamp: int(time.Now().Unix()),
 			}
 			store[string(key)] = record
 		}
 
 		recordJson, err := json.Marshal(record)
-		fmt.Println(string(recordJson))
 		if err != nil {
 			fmt.Println("Error encoding record:", err)
 			return []byte{}
 		}
 		return encryptUsingHash(recordJson, key)
 	}
+	fmt.Println("OMG INCOMING MESSAGE")
 
-	updateChat(ip, incomingPayload)
-	record := store[string(key)]
+	record, exists := store[string(key)]
+	if !exists {
+		fmt.Println("AYO I GOT HERE NOT GOOD")
+		record = MsgRecord{
+			LastMsgIp:        ip,
+			LastMsgEncrypted: key,
+			LastMsgTimestamp: int(time.Now().Unix()),
+		}
+		store[string(key)] = record
+	}
+	fmt.Println(record.LastMsgEncrypted)
 	recordJson, err := json.Marshal(record)
+	fmt.Println("This is running. Told you so.")
+	fmt.Println(string(recordJson))
 	if err != nil {
 		fmt.Println("Error encoding record:", err)
 		return []byte{}
 	}
 	return encryptUsingHash(recordJson, key)
-}
-
-func updateChat(ip string, encrypted []byte) {
-	key := hex.EncodeToString(encrypted[:32])
-	store[key] = MsgRecord{
-		LastMsgIp:        ip,
-		LastMsgEncrypted: encrypted,
-		LastMsgTimestamp: int(time.Now().Unix()),
-	}
 }
 
 func runServer() {

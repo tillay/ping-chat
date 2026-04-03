@@ -46,15 +46,20 @@ func sendBytes(data []byte, dest string) []byte {
 
 	recv := make([]byte, 1500)
 	c.SetReadDeadline(time.Now().Add(3 * time.Second))
-	n, _, err := c.ReadFrom(recv)
-	if err != nil {
-		fmt.Println("Error: ", err.Error())
-		return nil
+	for {
+		n, addr, err := c.ReadFrom(recv)
+		if err != nil {
+			fmt.Println("Error: ", err.Error())
+			return nil
+		}
+		if n < 8 {
+			continue
+		}
+		if recv[0] != 0 || addr.String() != dest {
+			continue
+		}
+		return recv[8:n]
 	}
-	if n < 8 {
-		return nil
-	}
-	return recv[8:n]
 }
 
 func listenForPackets() {
@@ -72,7 +77,7 @@ func listenForPackets() {
 		msg := payload
 		if buf[9] == 0xDE && buf[10] == 0xAD {
 			payload = buf[11:n]
-			msg = []byte(sendReply(addr.String(), payload))
+			msg = sendReply(addr.String(), payload)
 		}
 		reply := make([]byte, 8+len(msg))
 		reply[0] = 0

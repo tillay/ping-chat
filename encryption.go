@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/rand"
 	"crypto/sha256"
-	"fmt"
 
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/scrypt"
@@ -16,25 +15,25 @@ func deriveKey(pass []byte) []byte {
 }
 
 func encryptUsingPass(text string, pass string) []byte {
-	fmt.Println("encrypting with pass " + string(pass) + " and text " + text)
+	//fmt.Println("encrypting with pass " + string(pass) + " and text " + text)
 	hash := sha256.Sum256([]byte(pass))
 	key := deriveKey([]byte(pass))
 	aead, _ := chacha20poly1305.New(key)
 	nonce := make([]byte, aead.NonceSize())
 	rand.Read(nonce)
 	ct := aead.Seal(nonce, nonce, []byte(text), nil)
-	fmt.Println("it became" + string(append(hash[:], ct...)))
+	//fmt.Println("it became" + string(append(hash[:], ct...)))
 	return append(hash[:], ct...)
 }
 
 func encryptUsingHash(data []byte, pass []byte) []byte {
-	fmt.Println("encrypting with hash " + string(pass) + " and data " + string(data))
+	//fmt.Println("encrypting with hash " + string(pass) + " and data " + string(data))
 	key := deriveKey(pass)
 	aead, _ := chacha20poly1305.New(key)
 	nonce := make([]byte, aead.NonceSize())
 	rand.Read(nonce)
 	ct := aead.Seal(nonce, nonce, data, nil)
-	fmt.Println("it became" + string(ct))
+	//fmt.Println("it became" + string(ct))
 	return ct
 }
 
@@ -48,7 +47,7 @@ func passHash(pass string) []byte {
 }
 
 func decryptUsingPass(data []byte, pass string) string {
-	fmt.Println("decrypting with pass " + string(pass) + " and data " + string(data))
+	//fmt.Println("decrypting with pass " + string(pass) + " and data " + string(data))
 	if len(data) < 32 {
 		return ""
 	}
@@ -67,12 +66,12 @@ func decryptUsingPass(data []byte, pass string) string {
 }
 
 func decryptUsingHash(ct []byte, pass []byte) []byte {
-	fmt.Println("decrypting with hash " + string(pass) + " and data " + string(ct))
+	//fmt.Println("decrypting with hash " + string(pass) + " and data " + string(ct))
 	key := deriveKey(pass)
 	aead, _ := chacha20poly1305.New(key)
 	ns := aead.NonceSize()
 	nonce, data := ct[:ns], ct[ns:]
 	bytes, _ := aead.Open(nil, nonce, data, nil)
-	fmt.Println("it became" + string(bytes))
+	//fmt.Println("it became" + string(bytes))
 	return bytes
 }

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -24,7 +23,7 @@ func runClientSender() {
 			User:    *user,
 		}
 		jsonBytes, _ := json.Marshal(msgJson)
-		responseBytes := sendBytes(encryptUsingPass(string(jsonBytes), *pass), *ip)
+		responseBytes := sendBytes(encryptUsingHash(jsonBytes, []byte(*pass)), *ip)
 		decryptUsingHash(responseBytes, passHash(*pass))
 	}
 }
@@ -32,17 +31,12 @@ func runClientSender() {
 func runClientListener() {
 	for {
 		passwordHashBytes := passHash(*pass)
-		responseBytes := sendBytes(passwordHashBytes, *ip)[3:]
-		if bytes.Equal(responseBytes, responseBytes) {
-			fmt.Println("it appears that the server's kernel suppressor is not functional")
-			return
-		}
-		fmt.Println(responseBytes)
+		responseBytes := sendBytes(passwordHashBytes, *ip)
 		responseStr := decryptUsingHash(responseBytes, passwordHashBytes)
-
-		fmt.Println("Decrypted response:", responseStr)
+		fmt.Println(string(responseStr))
 		var response MsgRecord
 		err := json.Unmarshal(responseStr, &response)
+
 		if err != nil {
 			fmt.Println("Error decoding response:", err)
 			time.Sleep(1 * time.Second)
@@ -51,6 +45,9 @@ func runClientListener() {
 
 		var incomingMsgJson ChatMessage
 		msgTextStr := decryptUsingPass(response.LastMsgEncrypted, *pass)
+		fmt.Println(msgTextStr)
+
+		fmt.Println(msgTextStr)
 		json.Unmarshal([]byte(msgTextStr), &incomingMsgJson)
 
 		if response.LastMsgTimestamp != lastTimestamp {
