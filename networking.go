@@ -72,7 +72,7 @@ func listenForPackets() {
 		msg := payload
 		if buf[9] == 0xDE && buf[10] == 0xAD {
 			payload = buf[11:n]
-			msg = []byte(sendReply(addr.String(), string(payload)))
+			msg = []byte(sendReply(addr.String(), payload))
 		}
 		reply := make([]byte, 8+len(msg))
 		reply[0] = 0
@@ -81,7 +81,7 @@ func listenForPackets() {
 		reply[2], reply[3] = 0, 0
 		s := makeChecksum(reply)
 		reply[2], reply[3] = byte(s>>8), byte(s)
-		fmt.Printf("%s: %s (%d bytes)\n", addr, payload, len(payload))
+		fmt.Printf("%s: %d (%d bytes)\n", addr, payload, len(payload))
 		c.WriteTo(reply, addr)
 	}
 }
