@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 
-	"golang.org/x/crypto/chacha20poly1305"//if throwing errors, use "go get goland.com/..."
+	"golang.org/x/crypto/chacha20poly1305"//if throwing errors, use "go get golang.com/..."
 	"golang.org/x/crypto/scrypt"
 )
 
@@ -21,7 +21,7 @@ func runClient() {//takes message and password, encrypts, decrypts, checks hash
 
 	encrypted := encrypt(message, pass)
 	fmt.Println(encrypted)
-	fmt.Println(decrypt(encrypted, "password123"))
+	fmt.Println(decrypt(encrypted, pass))
 	fmt.Println(extractHash(encrypted))
 }
 
