@@ -23,7 +23,7 @@ func makeChecksum(b []byte) uint16 {
 func enableKernelReplies(val bool) {
 	option := "0"
 	if !val {
-		option = "1"
+		option = "1" //1 makes system ignore incoming pings
 	}
 	err := os.WriteFile("/proc/sys/net/ipv4/icmp_echo_ignore_all", []byte(option), 0644)
 	processErr(err)
@@ -42,10 +42,10 @@ func sendBytes(data []byte, dest string) []byte {
 	defer c.Close()
 
 	dst, _ := net.ResolveIPAddr("ip4", dest)
-	c.WriteTo(buf, dst)
+	c.WriteTo(buf, dst)//Send packets
 
 	recv := make([]byte, 1500)
-	c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	c.SetReadDeadline(time.Now().Add(3 * time.Second)) //times out packets after 3 sec
 	n, _, err := c.ReadFrom(recv)
 	if err != nil {
 		fmt.Println("Error: ", err.Error())

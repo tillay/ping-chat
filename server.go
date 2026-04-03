@@ -32,5 +32,7 @@ func updateChat(ip string, encrypted []byte) {
 }
 
 func runServer() {
+	//
+
 
 }
