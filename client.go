@@ -13,6 +13,22 @@ type ChatMessage struct {
 
 var lastTimestamp int
 
+func runClient() {//takes message and password, encrypts, decrypts, checks hash
+	var pass string//please note servers will use main at main.go
+	var message string
+
+	
+	fmt.Println("Input password")
+	fmt.Scan(&pass)
+	fmt.Println("Input message")
+	fmt.Scan(&message)
+
+	encrypted := encryptUsingPass(message, pass)
+	fmt.Println(encrypted)
+	fmt.Println(decryptUsingPass(encrypted, pass))
+	fmt.Println(extractHash(encrypted))
+}
+
 func runClientSender() {
 	for {
 		fmt.Printf("> ")

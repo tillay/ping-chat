@@ -13,16 +13,13 @@ var (
 	ip           = flag.String("ip", "127.0.0.1", "server ip to connect to")
 )
 
-func main() {
+func main() { //takes input and redirects to run either client or server
+	mode := flag.String("mode", "client", "inputs server or client")
 	flag.Parse()
-	if *reauthKernel {
-		enableKernelReplies(true)
-	} else if *server {
-		enableKernelReplies(false)
+
+	if *mode == "server"{
 		runServer()
-	} else if *send {
-		runClientSender()
 	} else {
-		runClientListener()
+		runClient()
 	}
 }

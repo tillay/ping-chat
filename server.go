@@ -2,8 +2,9 @@ package main
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
+	"os"
+	"encoding/json"
 	"time"
 )
 
@@ -49,6 +50,18 @@ func sendReply(ip string, incomingPayload []byte) string {
 	return string(encryptUsingHash(recordJson, key))
 }
 
+func runServer() {
+	//flag.Parse()
+	if *reauthKernel {
+		enableKernelReplies(true)
+	} else if *server {
+		enableKernelReplies(false)
+		listenForPackets()
+	} else {
+		fmt.Println(sendString(os.Args[1], "91.98.131.91"))
+	}
+}
+
 func updateChat(ip string, encrypted []byte) {
 	key := hex.EncodeToString(encrypted[:32])
 	store[key] = MsgRecord{
@@ -56,8 +69,4 @@ func updateChat(ip string, encrypted []byte) {
 		LastMsgEncrypted: encrypted,
 		LastMsgTimestamp: int(time.Now().Unix()),
 	}
-}
-
-func runServer() {
-	listenForPackets()
 }
