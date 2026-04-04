@@ -21,7 +21,7 @@ func runClientSender() {
 		msgJson := ChatMessage{Message: msg, User: *user}
 		jsonBytes, _ := json.Marshal(msgJson)
 		hash := passHash(*pass)
-		sendBytes(append(hash, encryptToBytes(jsonBytes, hash)...), *ip)
+		sendBytes(append(hash, encryptToBytes(jsonBytes, []byte(*pass))...), *ip)
 	}
 }
 
@@ -45,8 +45,6 @@ func runClientListener() {
 		json.Unmarshal([]byte(msgTextStr), &incomingMsgJson)
 
 		if response.LastMsgTimestamp != lastTimestamp {
-			fmt.Println("ok so it thinks theres a new message")
-
 			fmt.Println(incomingMsgJson.User + ": " + incomingMsgJson.Message)
 			lastTimestamp = response.LastMsgTimestamp
 
