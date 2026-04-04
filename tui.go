@@ -19,16 +19,22 @@ func initTUI(onSend func(string)) {
 		SetScrollable(true).
 		SetDynamicColors(true).
 		ScrollToEnd()
+	msgView.SetBackgroundColor(tcell.ColorDefault)
+	msgView.SetBorderPadding(0, 0, 1, 1)
 	msgView.SetBorder(true)
+	msgView.SetTitle(" PingChat v2 ")
 
-	inputBox := tview.NewInputField().SetLabel("> ")
+	inputBox := tview.NewInputField()
+	inputBox.SetBorder(true)
+	inputBox.SetBackgroundColor(tcell.ColorDefault)
+	inputBox.SetFieldBackgroundColor(tcell.ColorDefault)
 
 	inputBox.SetDoneFunc(func(key tcell.Key) {
 		if key != tcell.KeyEnter {
 			return
 		}
 		text := inputBox.GetText()
-		if text == "" {
+		if text == "" || len(text) > 512 {
 			return
 		}
 		inputBox.SetText("")
@@ -37,8 +43,7 @@ func initTUI(onSend func(string)) {
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(msgView, 0, 1, false).
-		AddItem(inputBox, 1, 0, true)
-
+		AddItem(inputBox, 3, 1, true)
 	app.SetRoot(flex, true).SetFocus(inputBox)
 }
 
