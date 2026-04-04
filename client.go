@@ -8,12 +8,13 @@ import (
 type ChatMessage struct {
 	Message string `json:"msg"`
 	User    string `json:"user"`
+	Color   string `json:"color"`
 }
 
 var lastTimestamp int
 
 func runClientSender(msg string) {
-	msgJson := ChatMessage{Message: msg, User: *user}
+	msgJson := ChatMessage{Message: msg, User: *user, Color: *color}
 	jsonBytes, _ := json.Marshal(msgJson)
 	hash := passHash(*pass)
 	sendBytes(append(hash, encryptToBytes(jsonBytes, []byte(*pass))...), *ip)
@@ -37,7 +38,7 @@ func runClientListener() {
 			if incomingMsgJson.Message == "" && incomingMsgJson.User == "" {
 				tuiPrint("Chat begins here")
 			} else {
-				tuiPrint(incomingMsgJson.User + ": " + incomingMsgJson.Message)
+				tuiPrint("[" + incomingMsgJson.Color + "]" + incomingMsgJson.User + "[white]: " + incomingMsgJson.Message)
 			}
 			lastTimestamp = response.LastMsgTimestamp
 		}
