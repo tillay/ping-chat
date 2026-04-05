@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -27,6 +28,7 @@ func enableKernelReplies(val bool) {
 	}
 	err := os.WriteFile("/proc/sys/net/ipv4/icmp_echo_ignore_all", []byte(option), 0644)
 	processErr(err)
+	fmt.Println("successfully set kernel icmp replies to " + strconv.FormatBool(val))
 }
 
 func sendBytes(data []byte, dest string) []byte {
@@ -49,12 +51,14 @@ func sendBytes(data []byte, dest string) []byte {
 	for {
 		n, addr, err := c.ReadFrom(recv)
 		if err != nil {
-			fmt.Println("Error: ", err.Error())
+			tuiPrint("Error: " + err.Error())
+			connected = false
 			return nil
 		}
 		if n < 11 || recv[0] != 0 || addr.String() != dest || recv[9] != 0x4F || recv[10] != 0x4B {
 			continue
 		}
+		connected = true
 		return recv[11:n]
 	}
 }
@@ -67,18 +71,18 @@ func listenForPackets() {
 	buf := make([]byte, 1500)
 	for {
 		n, addr, _ := c.ReadFrom(buf)
-		if n < 8 || buf[0] != 8 {
+		if n < 8 || buf[0] != 8 { // check for malformed pings
 			continue
 		}
 		var msg []byte
-		if n >= 11 && buf[9] == 0x4F && buf[10] == 0x4B {
+		if n >= 11 && buf[9] == 0x4F && buf[10] == 0x4B { // check for magic numbers to differentiate from normal pings
 			payload := make([]byte, n-11)
 			copy(payload, buf[11:n])
 			fmt.Printf("%s: (%d bytes)\n", addr, len(payload))
-			msg = sendReply(addr.String(), payload)
+			msg = sendReply(addr.String(), payload) // send the formatted info to the server code to deal with
 			reply := make([]byte, 11+len(msg))
 			reply[0] = 0
-			reply[9], reply[10] = 0x4F, 0x4B
+			reply[9], reply[10] = 0x4F, 0x4B // pack magic numbers into reply
 			copy(reply[4:8], buf[4:8])
 			copy(reply[11:], msg)
 			reply[2], reply[3] = 0, 0
@@ -86,6 +90,7 @@ func listenForPackets() {
 			reply[2], reply[3] = byte(s>>8), byte(s)
 			c.WriteTo(reply, addr)
 		} else {
+			// respond to normal pings with just the text they sent
 			reply := make([]byte, n)
 			reply[0] = 0
 			copy(reply[4:], buf[4:n])

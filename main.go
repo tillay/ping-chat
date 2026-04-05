@@ -11,6 +11,7 @@ var (
 	pass         = flag.String("pass", "", "shared password to chat using")
 	ip           = flag.String("ip", "127.0.0.1", "server ip to connect to")
 	color        = flag.String("color", "#fff", "color output")
+	connected    = false
 )
 
 func main() {
