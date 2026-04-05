@@ -52,13 +52,13 @@ func sendBytes(data []byte, dest string) []byte {
 		n, addr, err := c.ReadFrom(recv)
 		if err != nil {
 			tuiPrint("Error: " + err.Error())
-			connected = false
+			setConnectedStatus(false)
 			return nil
 		}
 		if n < 11 || recv[0] != 0 || addr.String() != dest || recv[9] != 0x4F || recv[10] != 0x4B {
 			continue
 		}
-		connected = true
+		setConnectedStatus(true)
 		return recv[11:n]
 	}
 }

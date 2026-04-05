@@ -8,9 +8,10 @@ import (
 )
 
 var (
-	app      *tview.Application
-	msgView  *tview.TextView
-	sideView *tview.TextView
+	app        *tview.Application
+	msgView    *tview.TextView
+	usersView  *tview.TextView
+	statusView *tview.TextView
 )
 
 func initTUI(onSend func(string)) {
@@ -47,21 +48,33 @@ func initTUI(onSend func(string)) {
 		go onSend(text)
 	})
 
-	sideView = tview.NewTextView().
+	usersView = tview.NewTextView().
 		SetScrollable(true).
 		SetDynamicColors(true).
 		ScrollToEnd()
-	sideView.SetBackgroundColor(tcell.ColorDefault)
-	sideView.SetBorderPadding(0, 0, 1, 1)
-	sideView.SetBorder(true)
+	usersView.SetBackgroundColor(tcell.ColorDefault)
+	usersView.SetBorderPadding(0, 0, 1, 1)
+	usersView.SetBorder(true)
+
+	statusView = tview.NewTextView().
+		SetScrollable(true).
+		SetDynamicColors(true).
+		ScrollToEnd()
+	statusView.SetBackgroundColor(tcell.ColorDefault)
+	statusView.SetBorderPadding(0, 0, 1, 1)
+	statusView.SetBorder(true)
 
 	inner := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(msgView, 0, 1, false).
 		AddItem(inputBox, 3, 1, true)
 
+	right := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(usersView, 0, 1, false).
+		AddItem(statusView, 3, 1, false)
+
 	flex := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(inner, 0, 1, true).
-		AddItem(sideView, 0, 1, false)
+		AddItem(right, 0, 1, false)
 
 	// this nicely adjusts the proportions of the messages vs users box
 	app.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
@@ -73,9 +86,10 @@ func initTUI(onSend func(string)) {
 		if side > 32 {
 			side = 32
 		}
-		flex.ResizeItem(sideView, side, 0)
+		flex.ResizeItem(right, side, 0)
 		return false
 	})
+	setConnectedStatus(false)
 
 	app.SetRoot(flex, true).SetFocus(inputBox)
 }
@@ -94,8 +108,16 @@ func tuiPrint(line string) {
 
 func sideViewPrint(line string) {
 	app.QueueUpdateDraw(func() {
-		fmt.Fprintf(sideView, "%s\n", line)
+		fmt.Fprintf(usersView, "%s\n", line)
 	})
+}
+
+func setConnectedStatus(status bool) {
+	statusText := "[green]⬤[white] Connected"
+	if status == false {
+		statusText = "[red]⬤[white] Not connected"
+	}
+	statusView.SetText(statusText)
 }
 
 func runTUI() {
