@@ -10,7 +10,7 @@ var (
 	app     *tview.Application
 	msgView map[string]*tview.TextView
 	listNum int = 5
-	activeChannel string = ""
+	activeChannel string = "channel 0"
 )
 
 func initTUI(onSend func(string)) {
@@ -20,7 +20,7 @@ func initTUI(onSend func(string)) {
 
 	for i := 0; i < listNum; i++ {//initalize pages on per-channel basis
 		name := fmt.Sprintf("channel %d", i)
-		view, prim := channel(name)//channel returns TextView and Primitive
+		view, prim := channel(name, onSend)//channel returns TextView and Primitive
 		msgView[name] = view
 			pages.AddPage(name,prim,true,i == 0)
 		}
@@ -34,7 +34,42 @@ func initTUI(onSend func(string)) {
 		})
 	}
 
-	inputBox := tview.NewInputField()
+chat := tview.NewFlex().SetDirection(tview.FlexRow).
+	AddItem(pages,0,1, true)
+mainView := tview.NewFlex().
+	AddItem(list,20,0,false).
+	AddItem(chat,0,1,true)
+
+	signIn := tview.NewForm().
+		AddInputField("username", "", 20, nil, nil).
+		AddInputField("password", "", 20, nil, nil).
+		AddDropDown("username color",[]string{"red","blue","green"},0,nil).
+		AddButton("enter", func() {
+		username := signIn.GetFormItemByLabel("username").(*tview.InputField).GetText()
+		password := signIn.GetFormItemByLabel("password").(*tview.InputField).GetText()
+		color := signIn.GetDropDown("username color").(*tview.InputField).GetCurrentOption()
+		fmt.println(username,password,color)
+			pages.SwitchToPage("main")
+		})
+	signIn.SetBorder(true).SetTitle("enter details").SetTitleAlign(tview.AlignLeft)
+	
+	pages.AddPage("signIn",signIn,true,true)
+	pages.AddPage("main",mainView,true,false)
+
+app.SetRoot(pages,true).SetFocus(signIn) //puts the user in sign in to start
+}
+
+func channel(name string, onSend func(string)) (*tview.TextView, tview.Primitive){
+	textView := tview.NewTextView().
+		SetScrollable(true).
+		SetDynamicColors(true)
+		textView.ScrollToEnd()
+	textView.SetBackgroundColor(tcell.ColorDefault)
+	textView.SetBorderPadding(0, 0, 1, 1)
+	textView.SetBorder(true)
+	textView.SetTitle(" PingChat v2 ")
+
+		inputBox := tview.NewInputField()
 	inputBox.SetBorder(true)
 	inputBox.SetBackgroundColor(tcell.ColorDefault)
 	inputBox.SetFieldBackgroundColor(tcell.ColorDefault)
@@ -50,44 +85,6 @@ func initTUI(onSend func(string)) {
 		inputBox.SetText("")
 		go onSend(text)
 	})
-
-chat := tview.NewFlex().SetDirection(tview.FlexRow).
-	AddItem(pages,0,1, true).
-	AddItem(inputBox, 3, 1, true)
-
-mainView := tview.NewFlex().
-	AddItem(list,20,0,false).
-	AddItem(chat,0,1,true)
-
-	signIn := tview.NewForm().
-		AddInputField("username", "", 20, nil, nil).
-		AddInputField("password", "", 20, nil, nil).
-		AddDropDown("username color",[]string{"red","blue","green"},0,nil).
-		AddButton("enter", func() {
-			pages.SwitchToPage("main")
-		})
-	signIn.SetBorder(true).SetTitle("enter details").SetTitleAlign(tview.AlignLeft)
-	
-	pages.AddPage("signIn",signIn,true,true)
-	pages.AddPage("main",mainView,true,false)
-
-app.SetRoot(pages,true).SetFocus(signIn) //puts the user in sign in to start
-}
-
-func channel(name string) (*tview.TextView, tview.Primitive){
-	textView := tview.NewTextView().
-		SetScrollable(true).
-		SetDynamicColors(true)
-		textView.ScrollToEnd()
-	textView.SetBackgroundColor(tcell.ColorDefault)
-	textView.SetBorderPadding(0, 0, 1, 1)
-	textView.SetBorder(true)
-	textView.SetTitle(" PingChat v2 ")
-
-	inputBox := tview.NewInputField()
-	inputBox.SetBorder(true)
-	inputBox.SetBackgroundColor(tcell.ColorDefault)
-	inputBox.SetFieldBackgroundColor(tcell.ColorDefault)
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(textView, 0, 1, false).
