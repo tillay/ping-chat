@@ -38,7 +38,8 @@ func handleResponse(responseBytes []byte) {
 			compressedUserData := incomingMsgJson.Color + incomingMsgJson.User + response.MsgIp + response.MsgIp
 			if !slices.Contains(users, compressedUserData) {
 				users = append(users, compressedUserData)
-				sideViewPrint("[" + incomingMsgJson.Color + "]" + incomingMsgJson.User + "[white]: " + response.IpLocation)
+				userViewPrint("[" + incomingMsgJson.Color + "]" + incomingMsgJson.User)
+				userViewPrint("[white]" + response.IpLocation + "\n")
 			}
 			tuiPrint("[" + incomingMsgJson.Color + "]" + incomingMsgJson.User + "[white]: " + incomingMsgJson.Message)
 		}
