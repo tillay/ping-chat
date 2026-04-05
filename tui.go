@@ -113,6 +113,9 @@ func userViewPrint(line string) {
 }
 
 func setConnectedStatus(status bool) {
+	if *server {
+		return
+	}
 	statusText := "[green]⬤[white] Connected"
 	if status == false {
 		statusText = "[red]⬤[white] Not connected"
