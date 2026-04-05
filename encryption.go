@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 
-	"golang.org/x/crypto/chacha20poly1305"
+	"golang.org/x/crypto/chacha20poly1305"//if throwing errors, use "go get golang.com/..."
 	"golang.org/x/crypto/scrypt"
 )
 
