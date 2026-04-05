@@ -106,7 +106,7 @@ func tuiPrint(line string) {
 	}
 }
 
-func sideViewPrint(line string) {
+func userViewPrint(line string) {
 	app.QueueUpdateDraw(func() {
 		fmt.Fprintf(usersView, "%s\n", line)
 	})
