@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 )
@@ -9,8 +10,9 @@ import (
 type MsgRecord struct {
 	MsgIp        string
 	MsgPayload   []byte
-	MsgTimestamp int
+	MsgTimestamp int64
 	IpLocation   string
+	IpTimestamps map[string]int64 `json:"-"`
 }
 
 var store = map[string]MsgRecord{}
@@ -25,29 +27,48 @@ func sendReply(ip string, incomingPayload []byte) []byte {
 		// the 32 bytes is the hash of the password that the server should encrypt with
 		record, exists := store[string(key)]
 		if !exists {
-			// create a new conversation struct entry for this password hash
-			store[string(key)] = MsgRecord{MsgIp: ip, MsgTimestamp: int(time.Now().Unix())}
+			store[string(key)] = MsgRecord{
+				MsgIp:        ip,
+				MsgTimestamp: time.Now().Unix(),
+				IpLocation:   getIpLocation(ip),
+				IpTimestamps: map[string]int64{ip: time.Now().Unix()},
+			}
 		} else {
-			_ = record
+			record.IpTimestamps[ip] = time.Now().Unix()
+			store[string(key)] = record
 		}
+
 		record = store[string(key)]
 		recordJson, _ := json.Marshal(record)
+		fmt.Println(string(recordJson))
+
 		return encryptToBytes(recordJson, key)
 	}
 
 	encrypted := incomingPayload[32:]
 
 	// package together the ip of the sender, encrypted text sender sent, and timestamp
-	store[string(key)] = MsgRecord{
-		MsgIp:        ip,
-		MsgPayload:   encrypted,
-		MsgTimestamp: int(time.Now().Unix()),
-		IpLocation:   getIpLocation(ip),
+	record, exists := store[string(key)]
+	if !exists {
+		record = MsgRecord{
+			MsgIp:        ip,
+			MsgPayload:   encrypted,
+			MsgTimestamp: time.Now().Unix(),
+			IpLocation:   getIpLocation(ip),
+			IpTimestamps: map[string]int64{},
+		}
+	} else {
+		record.MsgPayload = encrypted
+		record.IpLocation = getIpLocation(ip)
+		record.MsgTimestamp = time.Now().Unix()
+		record.MsgIp = ip
 	}
-	record := store[string(key)]
-	recordJson, _ := json.Marshal(record)
 
-	// encrypt and send package to client
+	record.IpTimestamps[ip] = time.Now().Unix()
+	store[string(key)] = record
+
+	recordJson, _ := json.Marshal(record)
+	fmt.Println(string(recordJson))
 	return encryptToBytes(recordJson, key)
 }
 

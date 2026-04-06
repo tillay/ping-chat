@@ -12,7 +12,7 @@ type ChatMessage struct {
 	Color   string `json:"color"`
 }
 
-var lastTimestamp int
+var lastTimestamp int64
 var users []string
 
 // this runs to parse the response from the server returning a ping
