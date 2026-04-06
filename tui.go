@@ -14,28 +14,26 @@ var (
 	statusView *tview.TextView
 )
 
+func newView() *tview.TextView {
+	v := tview.NewTextView().SetScrollable(true).SetDynamicColors(true).ScrollToEnd()
+	v.SetBackgroundColor(tcell.ColorDefault)
+	v.SetBorderPadding(0, 0, 1, 1)
+	v.SetBorder(true)
+	return v
+}
+
 func initTUI(onSend func(string)) {
 	app = tview.NewApplication()
 	tview.Styles.PrimitiveBackgroundColor = tcell.ColorDefault
 
-	// define the part where new messages scroll in
-	msgView = tview.NewTextView().
-		SetScrollable(true).
-		SetDynamicColors(true).
-		ScrollToEnd()
-
-	msgView.SetBackgroundColor(tcell.ColorDefault)
-	msgView.SetBorderPadding(0, 0, 1, 1)
-	msgView.SetBorder(true)
+	msgView, usersView, statusView = newView(), newView(), newView()
 	msgView.SetTitle(" PingChat v2 ")
 
-	// define the box at the bottom where the user types
 	inputBox := tview.NewInputField()
 	inputBox.SetBorder(true)
 	inputBox.SetFieldBackgroundColor(tcell.ColorDefault)
 	inputBox.SetLabelColor(tcell.ColorWhite)
 	inputBox.SetLabel("> ")
-
 	inputBox.SetDoneFunc(func(key tcell.Key) {
 		if key != tcell.KeyEnter {
 			return
@@ -47,22 +45,6 @@ func initTUI(onSend func(string)) {
 		inputBox.SetText("")
 		go onSend(text)
 	})
-
-	usersView = tview.NewTextView().
-		SetScrollable(true).
-		SetDynamicColors(true).
-		ScrollToEnd()
-	usersView.SetBackgroundColor(tcell.ColorDefault)
-	usersView.SetBorderPadding(0, 0, 1, 1)
-	usersView.SetBorder(true)
-
-	statusView = tview.NewTextView().
-		SetScrollable(true).
-		SetDynamicColors(true).
-		ScrollToEnd()
-	statusView.SetBackgroundColor(tcell.ColorDefault)
-	statusView.SetBorderPadding(0, 0, 1, 1)
-	statusView.SetBorder(true)
 
 	inner := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(msgView, 0, 1, false).
@@ -76,21 +58,13 @@ func initTUI(onSend func(string)) {
 		AddItem(inner, 0, 1, true).
 		AddItem(right, 0, 1, false)
 
-	// this nicely adjusts the proportions of the messages vs users box
 	app.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
-		width, _ := screen.Size()
-		side := width / 9
-		if side < 20 {
-			side = 20
-		}
-		if side > 32 {
-			side = 32
-		}
+		w, _ := screen.Size()
+		side := max(20, min(w/9, 32))
 		flex.ResizeItem(right, side, 0)
 		return false
 	})
 	setConnectedStatus(false)
-
 	app.SetRoot(flex, true).SetFocus(inputBox)
 }
 
