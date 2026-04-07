@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"slices"
 	"time"
 )
@@ -33,9 +34,11 @@ func handleResponse(responseBytes []byte) {
 
 	// determine if the message is new using the timestamp provided by the server. if it is new, print it
 	if response.MsgTimestamp != lastTimestamp {
-		if incomingMsgJson.Message == "" && incomingMsgJson.User == "" {
-			tuiPrint("Chat begins here")
-		} else {
+		if response.MsgTimestamp >= lastTimestamp+5*60 {
+			tuiPrint("")
+			tuiPrint("[slategray]" + formatTimestamp(response.MsgTimestamp))
+		}
+		if incomingMsgJson.Message != "" || incomingMsgJson.User != "" {
 			compressedUserData := incomingMsgJson.Color + incomingMsgJson.User
 			if !slices.Contains(users, compressedUserData) {
 				users = append(users, compressedUserData)
@@ -72,6 +75,11 @@ func runClientListener() {
 		}
 		time.Sleep(time.Second / 5)
 	}
+}
+
+func formatTimestamp(ts int64) string {
+	t := time.Unix(ts, 0)
+	return fmt.Sprintf("%d. %s %d, %02d:%02d", t.Day(), t.Month().String(), t.Year(), t.Hour(), t.Minute())
 }
 
 func runClient() {

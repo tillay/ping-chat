@@ -1,0 +1,43 @@
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v4
+        with:
+          go-version: '1.25.7'
+
+      - name: Build
+        run: |
+          GOOS=linux GOARCH=amd64 go build -o uno-linux-x86
+          GOOS=linux GOARCH=arm64 go build -o uno-linux-arm64
+      - name: Set tag
+        run: echo "TAG=${GITHUB_SHA::8}" >> $GITHUB_ENV
+
+      - name: Create tag
+        run: |
+          git config user.name tillay
+          git config user.email tilleyy8@gmail.com
+          git tag $TAG
+          git push origin $TAG
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: ${{ env.TAG }}
+          files: |
+            uno-linux-x86
+            uno-linux-arm64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

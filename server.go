@@ -19,6 +19,10 @@ type MsgRecord struct {
 var store = map[string]MsgRecord{}
 var locationCache = map[string]string{}
 
+// todo: hash ip and send it to client
+// then include in notes that that hash has either come online or gone offline
+// and then client can somehow get the user(s?) with that hash and print that said user has changed online status
+// (but how to handle it if client doesnt have a hash for that user?)
 func getOrCreateRecord(key []byte, ip string) MsgRecord {
 	record, exists := store[string(key)]
 	if !exists {

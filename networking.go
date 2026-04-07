@@ -54,6 +54,7 @@ func sendBytes(data []byte, dest string) []byte {
 			if !strings.Contains(err.Error(), "timeout") {
 				tuiPrint("Error: " + err.Error())
 			}
+			isMsgOutgoing = false
 			setConnectedStatus(false)
 			return nil
 		}
