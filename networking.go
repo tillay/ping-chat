@@ -51,7 +51,9 @@ func sendBytes(data []byte, dest string) []byte {
 	for {
 		n, addr, err := c.ReadFrom(recv)
 		if err != nil {
-			tuiPrint("Error: " + err.Error())
+			if !strings.Contains(err.Error(), "timeout") {
+				tuiPrint("Error: " + err.Error())
+			}
 			setConnectedStatus(false)
 			return nil
 		}

@@ -39,10 +39,11 @@ func initTUI(onSend func(string)) {
 			return
 		}
 		text := inputBox.GetText()
-		if text == "" || len(text) > 512 {
+		if text == "" || len(text) > 512 || isMsgOutgoing {
 			return
 		}
 		inputBox.SetText("")
+		isMsgOutgoing = true
 		go onSend(text)
 	})
 
@@ -90,9 +91,9 @@ func setConnectedStatus(status bool) {
 	if *server {
 		return
 	}
-	statusText := "[green]⬤[white] Connected"
+	statusText := "[green]⬤[white]  Connected"
 	if status == false {
-		statusText = "[red]⬤[white] Not connected"
+		statusText = "[red]⬤[white]  Not connected"
 	}
 	statusView.SetText(statusText)
 }

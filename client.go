@@ -14,6 +14,7 @@ type ChatMessage struct {
 
 var lastTimestamp int64
 var users []string
+var isMsgOutgoing = false
 
 // this runs to parse the response from the server returning a ping
 func handleResponse(responseBytes []byte) {
@@ -35,13 +36,13 @@ func handleResponse(responseBytes []byte) {
 		if incomingMsgJson.Message == "" && incomingMsgJson.User == "" {
 			tuiPrint("Chat begins here")
 		} else {
-			compressedUserData := incomingMsgJson.Color + incomingMsgJson.User + response.MsgIp + response.MsgIp
+			compressedUserData := incomingMsgJson.Color + incomingMsgJson.User
 			if !slices.Contains(users, compressedUserData) {
 				users = append(users, compressedUserData)
 				userViewPrint("[" + incomingMsgJson.Color + "]" + incomingMsgJson.User)
 				userViewPrint("[white]" + response.IpLocation + "\n")
 			}
-			tuiPrint("[" + incomingMsgJson.Color + "]" + incomingMsgJson.User + "[white]: " + incomingMsgJson.Message)
+			tuiPrint("[" + incomingMsgJson.Color + "::U]" + incomingMsgJson.User + "[white]: " + incomingMsgJson.Message)
 		}
 		lastTimestamp = response.MsgTimestamp
 	}
@@ -56,6 +57,7 @@ func runClientSender(msg string) {
 	responseBytes := sendBytes(append(hash, encryptToBytes(jsonBytes, []byte(*pass))...), *ip)
 	if responseBytes != nil {
 		handleResponse(responseBytes)
+		isMsgOutgoing = false
 	}
 }
 
@@ -68,7 +70,7 @@ func runClientListener() {
 		if responseBytes != nil {
 			handleResponse(responseBytes)
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(time.Second / 5)
 	}
 }
 
