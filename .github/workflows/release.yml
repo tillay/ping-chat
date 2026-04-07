@@ -19,9 +19,9 @@ jobs:
 
       - name: Build
         run: |
-          GOOS=linux GOARCH=amd64 go build -o uno-linux-x86
-          GOOS=linux GOARCH=arm64 go build -o uno-linux-arm64
-          GOOS=linux GOARCH=386 go build -o uno-linux-i686
+          GOOS=linux GOARCH=amd64 go build -o pingchat-linux-x86
+          GOOS=linux GOARCH=arm64 go build -o pingchat-linux-arm64
+          GOOS=linux GOARCH=386 go build -o pingchat-linux-i686
       - name: Set tag
         run: echo "TAG=${GITHUB_SHA::8}" >> $GITHUB_ENV
 
@@ -38,8 +38,8 @@ jobs:
           tag_name: ${{ env.TAG }}
           name: ${{ env.TAG }}
           files: |
-            uno-linux-x86
-            uno-linux-arm64
-            uno-linux-i686
+            pingchat-linux-x86
+            pingchat-linux-arm64
+            pingchat-linux-i686
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
