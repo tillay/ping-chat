@@ -21,6 +21,7 @@ jobs:
         run: |
           GOOS=linux GOARCH=amd64 go build -o uno-linux-x86
           GOOS=linux GOARCH=arm64 go build -o uno-linux-arm64
+          GOOS=linux GOARCH=386 go build -o uno-linux-i686
       - name: Set tag
         run: echo "TAG=${GITHUB_SHA::8}" >> $GITHUB_ENV
 
@@ -39,5 +40,6 @@ jobs:
           files: |
             uno-linux-x86
             uno-linux-arm64
+            uno-linux-i686
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
