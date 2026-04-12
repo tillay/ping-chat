@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"sync"
 	"time"
 )
 
@@ -16,9 +17,12 @@ type ChatMessage struct {
 var lastTimestamp int64
 var users []string
 var isMsgOutgoing = false
+var mu sync.Mutex
 
 // this runs to parse the response from the server returning a ping
 func handleResponse(responseBytes []byte) {
+	mu.Lock()
+	defer mu.Unlock()
 	passwordHashBytes := passHash(*pass)
 	// decrypt the message encrypted by the server using the hash of the password
 	responseStr := decryptFromBytes(responseBytes, passwordHashBytes)
