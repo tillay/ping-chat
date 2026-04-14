@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 )
 
 var (
@@ -11,12 +12,15 @@ var (
 	pass         = flag.String("pass", "", "shared password to chat using")
 	ip           = flag.String("ip", "127.0.0.1", "server ip to connect to")
 	color        = flag.String("color", "#ffffff", "color output")
+	info         = flag.Bool("info", false, "send an info ping and print result")
 )
 
 func main() {
 	flag.Parse()
 	if *reauthKernel {
 		enableKernelReplies(true)
+	} else if *info {
+		fmt.Println(sendInfoPing(*ip))
 	} else if *server {
 		enableKernelReplies(false)
 		runServer()

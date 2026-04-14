@@ -78,7 +78,18 @@ func listenForPackets() {
 			continue
 		}
 		var msg []byte
-		if n >= 11 && buf[9] == 0x4F && buf[10] == 0x4B { // check for magic numbers to differentiate from normal pings
+		if n >= 11 && buf[9] == infoMagic1 && buf[10] == infoMagic2 {
+			msg := buildInfoReply(addr.String())
+			reply := make([]byte, 11+len(msg))
+			reply[0] = 0
+			reply[9], reply[10] = infoMagic1, infoMagic2
+			copy(reply[4:8], buf[4:8])
+			copy(reply[11:], msg)
+			reply[2], reply[3] = 0, 0
+			s := makeChecksum(reply)
+			reply[2], reply[3] = byte(s>>8), byte(s)
+			c.WriteTo(reply, addr)
+		} else if n >= 11 && buf[9] == 0x4F && buf[10] == 0x4B { // check for magic numbers to differentiate from normal pings
 			payload := make([]byte, n-11)
 			copy(payload, buf[11:n])
 			fmt.Printf("%s: (%d bytes)\n", addr, len(payload))
