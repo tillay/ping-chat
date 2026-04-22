@@ -1,28 +1,91 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"time"
 )
 
+type NoteEntry struct {
+	DedupHash string
+	Referent  string
+	Info      string
+	CreatedAt int64 `json:"-"`
+}
+
 type MsgRecord struct {
-	MsgIp        string `json:"-"`
-	MsgPayload   []byte
-	MsgTimestamp int64
-	IpLocation   string
-	IpTimestamps map[string]int64 `json:"-"`
-	Note         string
+	MsgIp         string `json:"-"`
+	MsgPayload    []byte
+	MsgTimestamp  int64
+	IpLocation    string
+	LastMixedHash string
+	OnlineHashes  map[string]int64 `json:"-"`
+	PendingNotes  []NoteEntry
 }
 
 var store = map[string]MsgRecord{}
 var locationCache = map[string]string{}
 
-// todo: hash ip and send it to client
-// then include in notes that that hash has either come online or gone offline
-// and then client can somehow get the user(s?) with that hash and print that said user has changed online status
-// (but how to handle it if client doesnt have a hash for that user?)
+func mixedHash(ip string, personalHash []byte) string {
+	h := sha256.Sum256(append([]byte(ip), personalHash...))
+	return hex.EncodeToString(h[:8])
+}
+
+func dedupHash() string {
+	b := make([]byte, 4)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func purgeNotesForHash(record *MsgRecord, hash string) {
+	filtered := make([]NoteEntry, 0, len(record.PendingNotes))
+	for _, n := range record.PendingNotes {
+		if n.Referent != hash {
+			filtered = append(filtered, n)
+		}
+	}
+	record.PendingNotes = filtered
+}
+
+func sweepRecord(record *MsgRecord, senderMixed string) {
+	now := time.Now().Unix()
+	for h, ts := range record.OnlineHashes {
+		if now-ts > 2 {
+			delete(record.OnlineHashes, h)
+			purgeNotesForHash(record, h)
+			record.PendingNotes = append(record.PendingNotes, NoteEntry{
+				DedupHash: dedupHash(),
+				Referent:  h,
+				Info:      "offline",
+				CreatedAt: now,
+			})
+		}
+	}
+
+	filtered := make([]NoteEntry, 0, len(record.PendingNotes))
+	for _, n := range record.PendingNotes {
+		if now-n.CreatedAt <= 20 {
+			filtered = append(filtered, n)
+		}
+	}
+	record.PendingNotes = filtered
+
+	if _, exists := record.OnlineHashes[senderMixed]; !exists {
+		purgeNotesForHash(record, senderMixed)
+		record.PendingNotes = append(record.PendingNotes, NoteEntry{
+			DedupHash: dedupHash(),
+			Referent:  senderMixed,
+			Info:      "online",
+			CreatedAt: now,
+		})
+	}
+	record.OnlineHashes[senderMixed] = now
+}
+
 func getOrCreateRecord(key []byte, ip string) MsgRecord {
 	record, exists := store[string(key)]
 	if !exists {
@@ -30,7 +93,8 @@ func getOrCreateRecord(key []byte, ip string) MsgRecord {
 			MsgIp:        ip,
 			MsgTimestamp: time.Now().Unix(),
 			IpLocation:   getIpLocation(ip),
-			IpTimestamps: map[string]int64{},
+			OnlineHashes: map[string]int64{},
+			PendingNotes: []NoteEntry{},
 		}
 	}
 	return record
@@ -43,22 +107,23 @@ func saveAndReply(record MsgRecord, key []byte) []byte {
 	return encryptToBytes(recordJson, key)
 }
 
-// reply to any incoming pings
-// gets incoming message ip and encrypted bytes from the client, returns what to reply with
 func sendReply(ip string, incomingPayload []byte) []byte {
 	key := extractHash(incomingPayload)
 	record := getOrCreateRecord(key, ip)
 
-	if len(incomingPayload) == 32 {
-		record.IpTimestamps[ip] = time.Now().Unix()
-	} else {
-		record.MsgPayload = incomingPayload[32:]
+	personalHash := incomingPayload[32:48]
+	senderMixed := mixedHash(ip, personalHash)
+
+	sweepRecord(&record, senderMixed)
+
+	if len(incomingPayload) > 48 {
+		record.MsgPayload = incomingPayload[48:]
 		record.MsgIp = ip
 		record.IpLocation = getIpLocation(ip)
 		record.MsgTimestamp = time.Now().Unix()
+		record.LastMixedHash = senderMixed
 	}
 
-	record.IpTimestamps[ip] = time.Now().Unix()
 	return saveAndReply(record, key)
 }
 

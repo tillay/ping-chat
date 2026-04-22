@@ -7,12 +7,13 @@ import (
 
 var (
 	server       = flag.Bool("server", false, "run as a server")
-	reauthKernel = flag.Bool("reauthKernel", false, "give authorization back to kernel to handle pings")
+	reauthKernel = flag.Bool("fix", false, "give authorization back to kernel to handle pings")
 	user         = flag.String("user", "guest", "user to chat as")
-	pass         = flag.String("pass", "", "shared password to chat using")
-	ip           = flag.String("ip", "127.0.0.1", "server ip to connect to")
-	color        = flag.String("color", "#ffffff", "color output")
-	info         = flag.Bool("info", false, "send an info ping and print result")
+	pass         = flag.String("pass", "", "shared password to for chat (everyone in gc uses this same pass)")
+	ip           = flag.String("ip", "", "server ip to connect to")
+	color        = flag.String("color", "#ffffff", "color to set your name")
+	info         = flag.Bool("info", false, "send a test ping")
+	sign         = flag.String("sign", "", "signature to sign messages with (do not share)")
 )
 
 func main() {
@@ -24,7 +25,10 @@ func main() {
 	} else if *server {
 		enableKernelReplies(false)
 		runServer()
-	} else {
+	} else if *sign != "" && *ip != "" && *user != "" && *pass != "" {
 		runClient()
+	} else {
+		fmt.Println("You need to specify server ip, user, pass, and sign")
+		flag.Usage()
 	}
 }
