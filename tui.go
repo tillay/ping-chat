@@ -24,6 +24,7 @@ func newView() *tview.TextView {
 
 func initTUI(onSend func(string)) {
 	app = tview.NewApplication()
+	app.EnableMouse(true)
 	tview.Styles.PrimitiveBackgroundColor = tcell.ColorDefault
 
 	msgView, usersView, statusView = newView(), newView(), newView()
