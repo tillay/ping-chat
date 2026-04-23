@@ -78,11 +78,11 @@ func listenForPackets() {
 			continue
 		}
 		var msg []byte
-		if n >= 11 && buf[9] == infoMagic1 && buf[10] == infoMagic2 {
+		if n >= 11 && buf[9] == im1 && buf[10] == im2 {
 			msg := buildInfoReply(addr.String())
 			reply := make([]byte, 11+len(msg))
 			reply[0] = 0
-			reply[9], reply[10] = infoMagic1, infoMagic2
+			reply[9], reply[10] = im1, im2
 			copy(reply[4:8], buf[4:8])
 			copy(reply[11:], msg)
 			reply[2], reply[3] = 0, 0

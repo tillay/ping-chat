@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-const infoMagic1 byte = 0x49
-const infoMagic2 byte = 0x4E
+const im1 byte = 0x49
+const im2 byte = 0x4E
 
 type ipInfoResponse struct {
 	IP      string `json:"ip"`
@@ -40,7 +40,7 @@ func buildInfoReply(ip string) []byte {
 func sendInfoPing(dest string) string {
 	buf := make([]byte, 11)
 	buf[0] = 8
-	buf[9], buf[10] = 0x49, 0x4E
+	buf[9], buf[10] = im1, im2
 	s := makeChecksum(buf)
 	buf[2], buf[3] = byte(s>>8), byte(s)
 

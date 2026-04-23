@@ -12,7 +12,7 @@ var (
 	pass         = flag.String("pass", "", "shared password to for chat (everyone in gc uses this same pass)")
 	ip           = flag.String("ip", "", "server ip to connect to")
 	color        = flag.String("color", "#ffffff", "color to set your name")
-	info         = flag.Bool("test", false, "send a test ping")
+	test         = flag.Bool("test", false, "send a test ping")
 	sign         = flag.String("sign", "", "signature to sign messages with (do not share)")
 )
 
@@ -20,7 +20,7 @@ func main() {
 	flag.Parse()
 	if *reauthKernel {
 		enableKernelReplies(true)
-	} else if *info {
+	} else if *test {
 		if *ip != "" {
 			fmt.Println(sendInfoPing(*ip))
 		} else {
