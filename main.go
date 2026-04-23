@@ -12,7 +12,7 @@ var (
 	pass         = flag.String("pass", "", "shared password to for chat (everyone in gc uses this same pass)")
 	ip           = flag.String("ip", "", "server ip to connect to")
 	color        = flag.String("color", "#ffffff", "color to set your name")
-	info         = flag.Bool("info", false, "send a test ping")
+	info         = flag.Bool("test", false, "send a test ping")
 	sign         = flag.String("sign", "", "signature to sign messages with (do not share)")
 )
 
@@ -21,14 +21,18 @@ func main() {
 	if *reauthKernel {
 		enableKernelReplies(true)
 	} else if *info {
-		fmt.Println(sendInfoPing(*ip))
+		if *ip != "" {
+			fmt.Println(sendInfoPing(*ip))
+		} else {
+			fmt.Println("you need to specify ip to ping")
+		}
 	} else if *server {
 		enableKernelReplies(false)
-		runServer()
+		listenForPackets()
 	} else if *sign != "" && *ip != "" && *user != "" && *pass != "" {
 		runClient()
 	} else {
-		fmt.Println("You need to specify server ip, user, pass, and sign")
+		fmt.Println("------\nYou need to specify server ip, user, pass, and sign\n------")
 		flag.Usage()
 	}
 }

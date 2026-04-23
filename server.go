@@ -11,20 +11,20 @@ import (
 )
 
 type NoteEntry struct {
-	DedupHash string
-	Referent  string
-	Info      string
-	CreatedAt int64 `json:"-"`
+	DedupHash string `json:"d"`
+	Referent  string `json:"r"`
+	Info      string `json:"i"`
+	CreatedAt int64  `json:"-"`
 }
 
 type MsgRecord struct {
-	MsgIp         string `json:"-"`
-	MsgPayload    []byte
-	MsgTimestamp  int64
-	IpLocation    string
-	LastMixedHash string
+	MsgIp         string           `json:"-"`
+	MsgPayload    []byte           `json:"p"`
+	MsgTimestamp  int64            `json:"t"`
+	IpLocation    string           `json:"l"`
+	LastMixedHash string           `json:"h"`
 	OnlineHashes  map[string]int64 `json:"-"`
-	PendingNotes  []NoteEntry
+	PendingNotes  []NoteEntry      `json:"n"`
 }
 
 var store = map[string]MsgRecord{}
@@ -111,16 +111,16 @@ func sendReply(ip string, incomingPayload []byte) []byte {
 	key := extractHash(incomingPayload)
 	record := getOrCreateRecord(key, ip)
 
-	if len(incomingPayload) < 48 {
+	if len(incomingPayload) < 32 {
 		return incomingPayload
 	}
 
-	senderMixed := mixedHash(ip, incomingPayload[32:48])
+	senderMixed := mixedHash(ip, incomingPayload[16:32])
 
 	sweepRecord(&record, senderMixed)
 
-	if len(incomingPayload) > 48 {
-		record.MsgPayload = incomingPayload[48:]
+	if len(incomingPayload) > 32 {
+		record.MsgPayload = incomingPayload[32:]
 		record.MsgIp = ip
 		record.IpLocation = getIpLocation(ip)
 		record.MsgTimestamp = time.Now().Unix()
@@ -144,8 +144,4 @@ func getIpLocation(ip string) string {
 	loc := data["city"] + ", " + data["country"]
 	locationCache[ip] = loc
 	return loc
-}
-
-func runServer() {
-	listenForPackets()
 }

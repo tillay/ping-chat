@@ -10,9 +10,9 @@ import (
 )
 
 type ChatMessage struct {
-	Message string `json:"msg"`
-	User    string `json:"user"`
-	Color   string `json:"color"`
+	Message string `json:"m"`
+	User    string `json:"u"`
+	Color   string `json:"c"`
 }
 
 var lastTimestamp int64
@@ -61,6 +61,9 @@ func processNotes(response MsgRecord) {
 		if seenNotes[note.DedupHash] {
 			continue
 		}
+
+		// user hashes are 8 bytes long; if it's not that, assume it's a message from the server to print
+		// there is no usage of this feature (yet)
 		if rawNote, _ := hex.DecodeString(note.Referent); len(rawNote) != 8 {
 			seenNotes[note.DedupHash] = true
 			tuiPrint(note.Info)
@@ -110,12 +113,12 @@ func handleResponse(responseBytes []byte) {
 	// now we have both lastMessage (extends ChatMessage) and serverResponse (extends MsgRecord)
 	// (this is where the fun begins)
 
-	// this entire block is ONLY RUN AFTER first msg in convo sent
 	if convoIsNotNew {
 
 		// if it's been more than 5 minutes since last message print the time
 		if serverResponse.MsgTimestamp >= lastTimestamp+5*60 {
-			if convoIsNotNew {
+			if len(firstSeenHash) != 0 {
+				// print a spacing line if the user did not just enter the convo
 				tuiPrint("")
 			}
 			tuiPrint("[slategray]" + formatTimestamp(serverResponse.MsgTimestamp))
@@ -125,13 +128,14 @@ func handleResponse(responseBytes []byte) {
 		mixedHashToUser[serverResponse.LastMixedHash] = userInfo{lastMessage.Color, lastMessage.User, serverResponse.IpLocation}
 
 		// check if this hash has been seen before; if it hasn't, add it to the lookup map for hash -> first user seen with that hash
-		// and also set it to be online (quietly because it's assuming it is only because message sent recently)
+		// and also set the user to be online (quietly because it's assuming based only on message recency)
 		if _, seen := firstSeenHash[lastMessage.User]; !seen {
-			// this runs if this hash HASN'T been seen before
+
+			// it gets to here if this latest hash HASN'T been seen before
 			firstSeenHash[lastMessage.User] = serverResponse.LastMixedHash
 
-			// if it hasn't seen this hash before but the message was sent in the last 20 seconds, set the user to online (quietly)
-			if time.Now().Unix()-serverResponse.MsgTimestamp <= 20 {
+			// if the message was sent in the last 20 seconds OR the message was sent by the user, set the sender to online (quietly)
+			if time.Now().Unix()-serverResponse.MsgTimestamp <= 20 || lastMessage.User == *user {
 				if _, online := onlineUsers[serverResponse.LastMixedHash]; !online {
 					onlineUsers[serverResponse.LastMixedHash] = userInfo{lastMessage.Color, lastMessage.User, serverResponse.IpLocation}
 					app.QueueUpdateDraw(redrawUserView)
@@ -145,7 +149,7 @@ func handleResponse(responseBytes []byte) {
 	}
 
 	// determine if the message is new using the timestamp provided by the server. if it is new, print it
-	// this block is only run IF THERE IS A NEW MESSAGE and CHAT IS NOT NEW
+	// this block is run IF THERE IS A NEW MESSAGE
 	if serverResponse.MsgTimestamp != lastTimestamp {
 		if convoIsNotNew {
 			if first := firstSeenHash[lastMessage.User]; first != serverResponse.LastMixedHash {

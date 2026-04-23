@@ -10,7 +10,7 @@ import (
 
 func deriveKey(pass []byte) []byte {
 	hash := sha256.Sum256(pass)
-	key, _ := scrypt.Key(pass, hash[:8], 32768, 8, 1, 32)
+	key, _ := scrypt.Key(pass, hash[:8], 32768, 8, 1, 16)
 	return key
 }
 
@@ -24,7 +24,7 @@ func encryptToBytes(data []byte, pass []byte) []byte {
 }
 
 func extractHash(data []byte) []byte {
-	return data[:32]
+	return data[:16]
 }
 
 func passHash(pass string) []byte {
@@ -46,7 +46,7 @@ func decryptFromBytes(ct []byte, pass []byte) []byte {
 }
 
 func decryptUsingPass(data []byte, pass string) string {
-	if len(data) < 32 {
+	if len(data) < 16 {
 		return ""
 	}
 	key := deriveKey([]byte(pass))
