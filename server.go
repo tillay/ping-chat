@@ -11,20 +11,20 @@ import (
 )
 
 type NoteEntry struct {
-	DedupHash string
-	Referent  string
-	Info      string
-	CreatedAt int64 `json:"-"`
+	DedupHash string `json:"d"`
+	Referent  string `json:"r"`
+	Info      string `json:"i"`
+	CreatedAt int64  `json:"-"`
 }
 
 type MsgRecord struct {
-	MsgIp         string `json:"-"`
-	MsgPayload    []byte
-	MsgTimestamp  int64
-	IpLocation    string
-	LastMixedHash string
+	MsgIp         string           `json:"-"`
+	MsgPayload    []byte           `json:"p"`
+	MsgTimestamp  int64            `json:"t"`
+	IpLocation    string           `json:"l"`
+	LastMixedHash string           `json:"h"`
 	OnlineHashes  map[string]int64 `json:"-"`
-	PendingNotes  []NoteEntry
+	PendingNotes  []NoteEntry      `json:"n"`
 }
 
 var store = map[string]MsgRecord{}
