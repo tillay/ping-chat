@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -26,8 +27,8 @@ type userInfo struct {
 
 var firstSeenHash = map[string]string{}     // first hash seen for each username
 var mixedHashToUser = map[string]userInfo{} // user name, color, loc based on mixed hash
-var seenNotes = map[string]bool{}           // cache of note dedups sent by server
-var onlineUsers = map[string]userInfo{}     // cache of known users currently online
+var seenNotes = map[string]bool{}           // cache of note dedups sent by server (todo: make this a normal list)
+var onlineUsers = map[string]userInfo{}     // cache of known users currently online - list of userInfos
 
 func personalHash() []byte {
 	h := sha256.Sum256(append(append([]byte(*sign), []byte(*user)...), []byte(*color)...))
@@ -44,13 +45,13 @@ func redrawUserView() {
 func bringOnline(hash string, u userInfo) {
 	onlineUsers[hash] = u
 	app.QueueUpdateDraw(redrawUserView)
-	tuiPrint("[slategray]" + u.User + " came online")
+	tuiPrint("[slategray] " + u.User + " came online")
 }
 
 func bringOffline(hash string, u userInfo) {
 	delete(onlineUsers, hash)
 	app.QueueUpdateDraw(redrawUserView)
-	tuiPrint("[slategray]" + u.User + " went offline")
+	tuiPrint("[slategray] " + u.User + " went offline")
 }
 
 func processNotes(response MsgRecord) {
@@ -58,7 +59,7 @@ func processNotes(response MsgRecord) {
 		if seenNotes[note.DedupHash] {
 			continue
 		}
-		if note.Referent == "info" {
+		if rawNote, _ := hex.DecodeString(note.Referent); len(rawNote) != 8 {
 			seenNotes[note.DedupHash] = true
 			tuiPrint(note.Info)
 			continue
@@ -68,6 +69,7 @@ func processNotes(response MsgRecord) {
 		if !known {
 			continue
 		}
+
 		seenNotes[note.DedupHash] = true
 		_, isOnline := onlineUsers[note.Referent]
 		switch note.Info {
@@ -83,20 +85,6 @@ func processNotes(response MsgRecord) {
 	}
 }
 
-func senderOnlineNote(response MsgRecord) (found bool) {
-	for _, n := range response.PendingNotes {
-		if n.Referent != response.LastMixedHash || n.Info != "online" || seenNotes[n.DedupHash] {
-			continue
-		}
-		if _, isOnline := onlineUsers[n.Referent]; !isOnline {
-			bringOnline(n.Referent, mixedHashToUser[response.LastMixedHash])
-		}
-		seenNotes[n.DedupHash] = true
-		return true
-	}
-	return false
-}
-
 // this runs to parse the response from the server returning a ping
 func handleResponse(responseBytes []byte) {
 	mu.Lock()
@@ -104,46 +92,67 @@ func handleResponse(responseBytes []byte) {
 	passwordHashBytes := passHash(*pass)
 	// decrypt the message encrypted by the server using the hash of the password
 	responseStr := decryptFromBytes(responseBytes, passwordHashBytes)
-	var response MsgRecord
-	if err := json.Unmarshal(responseStr, &response); err != nil {
+	var serverResponse MsgRecord
+	if err := json.Unmarshal(responseStr, &serverResponse); err != nil {
 		return
 	}
 
-	var incomingMsgJson ChatMessage
+	var lastMessage ChatMessage
+
 	// now decrypt the internal message originally sent by the other client
-	msgTextStr := decryptUsingPass(response.MsgPayload, *pass)
-	json.Unmarshal([]byte(msgTextStr), &incomingMsgJson)
+	msgTextStr := decryptUsingPass(serverResponse.MsgPayload, *pass)
+	json.Unmarshal([]byte(msgTextStr), &lastMessage)
 
-	if response.LastMixedHash != "" && incomingMsgJson.User != "" {
-		mixedHashToUser[response.LastMixedHash] = userInfo{incomingMsgJson.Color, incomingMsgJson.User, response.IpLocation}
-		if _, seen := firstSeenHash[incomingMsgJson.User]; !seen {
-			firstSeenHash[incomingMsgJson.User] = response.LastMixedHash
-		}
-	}
+	// now we have both lastMessage (extends ChatMessage) and serverResponse (extends MsgRecord)
+	// (this is where the fun begins)
 
-	// determine if the message is new using the timestamp provided by the server. if it is new, print it
-	if response.MsgTimestamp != lastTimestamp {
-		if response.MsgTimestamp >= lastTimestamp+5*60 {
+	// this entire block is ONLY RUN AFTER first msg in convo sent
+	if serverResponse.LastMixedHash != "" && lastMessage.User != "" {
+
+		// if it's been more than 5 minutes since last message print the time
+		if serverResponse.MsgTimestamp >= lastTimestamp+5*60 {
 			tuiPrint("")
-			tuiPrint("[slategray]" + formatTimestamp(response.MsgTimestamp))
+			tuiPrint("[slategray]" + formatTimestamp(serverResponse.MsgTimestamp))
 		}
-		if incomingMsgJson.Message != "" || incomingMsgJson.User != "" {
-			if first := firstSeenHash[incomingMsgJson.User]; first != "" && first != response.LastMixedHash {
-				tuiPrint("[yellow]" + incomingMsgJson.User + " has invalid signature")
-			}
-			hasOnlineNote := senderOnlineNote(response)
-			if !hasOnlineNote && time.Now().Unix()-response.MsgTimestamp <= 20 {
-				if _, online := onlineUsers[response.LastMixedHash]; !online {
-					onlineUsers[response.LastMixedHash] = userInfo{incomingMsgJson.Color, incomingMsgJson.User, response.IpLocation}
+
+		// add the user data for this message to the lookup map for hash -> user info
+		mixedHashToUser[serverResponse.LastMixedHash] = userInfo{lastMessage.Color, lastMessage.User, serverResponse.IpLocation}
+
+		// check if this hash has been seen before; if it hasn't, add it to the lookup map for hash -> first user seen with that hash
+		// and also set it to be online (quietly because it's assuming it is only because message sent recently)
+		if _, seen := firstSeenHash[lastMessage.User]; !seen {
+			// this runs if this hash HASN'T been seen before
+			firstSeenHash[lastMessage.User] = serverResponse.LastMixedHash
+
+			// if it hasn't seen this hash before but the message was sent in the last 20 seconds, set the user to online (quietly)
+			if time.Now().Unix()-serverResponse.MsgTimestamp <= 20 {
+				if _, online := onlineUsers[serverResponse.LastMixedHash]; !online {
+					onlineUsers[serverResponse.LastMixedHash] = userInfo{lastMessage.Color, lastMessage.User, serverResponse.IpLocation}
 					app.QueueUpdateDraw(redrawUserView)
 				}
 			}
-			tuiPrint("[-:-:-][" + incomingMsgJson.Color + "]" + incomingMsgJson.User + "[-:-:-][white]: " + incomingMsgJson.Message)
 		}
-		lastTimestamp = response.MsgTimestamp
+
+		// check for any notes from the server
+		// any online or offline updates are printed in this function
+		processNotes(serverResponse)
 	}
 
-	processNotes(response)
+	// determine if the message is new using the timestamp provided by the server. if it is new, print it
+	// this block is only run IF THERE IS A NEW MESSAGE and CHAT IS NOT NEW
+	if serverResponse.MsgTimestamp != lastTimestamp {
+
+		// check if convo is NOT NEW
+		if lastMessage.Message != "" && lastMessage.User != "" {
+
+			if first := firstSeenHash[lastMessage.User]; first != serverResponse.LastMixedHash {
+				tuiPrint("[yellow]" + lastMessage.User + " has invalid signature")
+			}
+
+			tuiPrint("[-:-:-][" + lastMessage.Color + "]" + lastMessage.User + "[-:-:-][white]: " + lastMessage.Message)
+		}
+		lastTimestamp = serverResponse.MsgTimestamp
+	}
 }
 
 func runClientSender(msg string) {

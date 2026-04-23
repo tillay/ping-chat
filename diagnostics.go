@@ -40,7 +40,7 @@ func buildInfoReply(ip string) []byte {
 func sendInfoPing(dest string) string {
 	buf := make([]byte, 11)
 	buf[0] = 8
-	buf[9], buf[10] = infoMagic1, infoMagic2
+	buf[9], buf[10] = 0x49, 0x4E
 	s := makeChecksum(buf)
 	buf[2], buf[3] = byte(s>>8), byte(s)
 
@@ -58,7 +58,7 @@ func sendInfoPing(dest string) string {
 		if err != nil {
 			return ""
 		}
-		if n < 11 || recv[0] != 0 || addr.String() != dest || recv[9] != infoMagic1 || recv[10] != infoMagic2 {
+		if n < 11 || recv[0] != 0 || addr.String() != dest || recv[9] != buf[9] || recv[10] != buf[10] {
 			continue
 		}
 		return string(recv[11:n])

@@ -115,8 +115,7 @@ func sendReply(ip string, incomingPayload []byte) []byte {
 		return incomingPayload
 	}
 
-	personalHash := incomingPayload[32:48]
-	senderMixed := mixedHash(ip, personalHash)
+	senderMixed := mixedHash(ip, incomingPayload[32:48])
 
 	sweepRecord(&record, senderMixed)
 
