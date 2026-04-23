@@ -111,6 +111,10 @@ func sendReply(ip string, incomingPayload []byte) []byte {
 	key := extractHash(incomingPayload)
 	record := getOrCreateRecord(key, ip)
 
+	if len(incomingPayload) < 48 {
+		return incomingPayload
+	}
+
 	personalHash := incomingPayload[32:48]
 	senderMixed := mixedHash(ip, personalHash)
 

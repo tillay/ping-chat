@@ -21,10 +21,11 @@ var mu sync.Mutex
 type userInfo struct {
 	Color string
 	User  string
+	Loc   string
 }
 
 var firstSeenHash = map[string]string{}     // first hash seen for each username
-var mixedHashToUser = map[string]userInfo{} // username and color based on mixed hash
+var mixedHashToUser = map[string]userInfo{} // user name, color, loc based on mixed hash
 var seenNotes = map[string]bool{}           // cache of note dedups sent by server
 var onlineUsers = map[string]userInfo{}     // cache of known users currently online
 
@@ -36,7 +37,7 @@ func personalHash() []byte {
 func redrawUserView() {
 	usersView.SetText("")
 	for _, u := range onlineUsers {
-		fmt.Fprintf(usersView, "[%s]%s\n", u.Color, u.User)
+		fmt.Fprintf(usersView, "[%s]%s[white]\n%s\n\n", u.Color, u.User, u.Loc)
 	}
 }
 
@@ -63,6 +64,7 @@ func processNotes(response MsgRecord) {
 			continue
 		}
 		u, known := mixedHashToUser[note.Referent]
+
 		if !known {
 			continue
 		}
@@ -113,7 +115,7 @@ func handleResponse(responseBytes []byte) {
 	json.Unmarshal([]byte(msgTextStr), &incomingMsgJson)
 
 	if response.LastMixedHash != "" && incomingMsgJson.User != "" {
-		mixedHashToUser[response.LastMixedHash] = userInfo{incomingMsgJson.Color, incomingMsgJson.User}
+		mixedHashToUser[response.LastMixedHash] = userInfo{incomingMsgJson.Color, incomingMsgJson.User, response.IpLocation}
 		if _, seen := firstSeenHash[incomingMsgJson.User]; !seen {
 			firstSeenHash[incomingMsgJson.User] = response.LastMixedHash
 		}
@@ -132,7 +134,7 @@ func handleResponse(responseBytes []byte) {
 			hasOnlineNote := senderOnlineNote(response)
 			if !hasOnlineNote && time.Now().Unix()-response.MsgTimestamp <= 20 {
 				if _, online := onlineUsers[response.LastMixedHash]; !online {
-					onlineUsers[response.LastMixedHash] = userInfo{incomingMsgJson.Color, incomingMsgJson.User}
+					onlineUsers[response.LastMixedHash] = userInfo{incomingMsgJson.Color, incomingMsgJson.User, response.IpLocation}
 					app.QueueUpdateDraw(redrawUserView)
 				}
 			}
