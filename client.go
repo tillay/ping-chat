@@ -32,7 +32,7 @@ var onlineUsers = map[string]userInfo{}     // cache of known users currently on
 
 func personalHash() []byte {
 	h := sha256.Sum256(append(append([]byte(*sign), []byte(*user)...), []byte(*color)...))
-	return h[:32]
+	return h[:16]
 }
 
 func redrawUserView() {
