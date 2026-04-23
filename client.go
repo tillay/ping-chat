@@ -45,13 +45,15 @@ func redrawUserView() {
 func bringOnline(hash string, u userInfo) {
 	onlineUsers[hash] = u
 	app.QueueUpdateDraw(redrawUserView)
-	tuiPrint("[slategray] " + u.User + " came online")
+	if u.User != *user {
+		tuiPrint("[slategray]" + u.User + " came online")
+	}
 }
 
 func bringOffline(hash string, u userInfo) {
 	delete(onlineUsers, hash)
 	app.QueueUpdateDraw(redrawUserView)
-	tuiPrint("[slategray] " + u.User + " went offline")
+	tuiPrint("[slategray]" + u.User + " went offline")
 }
 
 func processNotes(response MsgRecord) {
@@ -103,15 +105,19 @@ func handleResponse(responseBytes []byte) {
 	msgTextStr := decryptUsingPass(serverResponse.MsgPayload, *pass)
 	json.Unmarshal([]byte(msgTextStr), &lastMessage)
 
+	convoIsNotNew := serverResponse.LastMixedHash != "" && lastMessage.User != ""
+
 	// now we have both lastMessage (extends ChatMessage) and serverResponse (extends MsgRecord)
 	// (this is where the fun begins)
 
 	// this entire block is ONLY RUN AFTER first msg in convo sent
-	if serverResponse.LastMixedHash != "" && lastMessage.User != "" {
+	if convoIsNotNew {
 
 		// if it's been more than 5 minutes since last message print the time
 		if serverResponse.MsgTimestamp >= lastTimestamp+5*60 {
-			tuiPrint("")
+			if convoIsNotNew {
+				tuiPrint("")
+			}
 			tuiPrint("[slategray]" + formatTimestamp(serverResponse.MsgTimestamp))
 		}
 
@@ -141,14 +147,10 @@ func handleResponse(responseBytes []byte) {
 	// determine if the message is new using the timestamp provided by the server. if it is new, print it
 	// this block is only run IF THERE IS A NEW MESSAGE and CHAT IS NOT NEW
 	if serverResponse.MsgTimestamp != lastTimestamp {
-
-		// check if convo is NOT NEW
-		if lastMessage.Message != "" && lastMessage.User != "" {
-
+		if convoIsNotNew {
 			if first := firstSeenHash[lastMessage.User]; first != serverResponse.LastMixedHash {
 				tuiPrint("[yellow]" + lastMessage.User + " has invalid signature")
 			}
-
 			tuiPrint("[-:-:-][" + lastMessage.Color + "]" + lastMessage.User + "[-:-:-][white]: " + lastMessage.Message)
 		}
 		lastTimestamp = serverResponse.MsgTimestamp
