@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -13,6 +12,11 @@ type ChatMessage struct {
 	Message string `json:"m"`
 	User    string `json:"u"`
 	Color   string `json:"c"`
+}
+
+type UserBlob struct {
+	User  string `json:"u"`
+	Color string `json:"c"`
 }
 
 var lastTimestamp int64
@@ -27,8 +31,12 @@ type userInfo struct {
 
 var firstSeenHash = map[string]string{}     // first hash seen for each username
 var mixedHashToUser = map[string]userInfo{} // user name, color, loc based on mixed hash
-var seenNotes = map[string]bool{}           // cache of note dedups sent by server (todo: make this a normal list)
+var seenNotes = map[string]struct{}{}       // cache of note dedups sent by server
 var onlineUsers = map[string]userInfo{}     // cache of known users currently online - list of userInfos
+
+func sendInfoPing(dest string) string {
+	return string(sendPacket(magicInfoBytes, []byte{}, dest))
+}
 
 func personalHash() []byte {
 	h := sha256.Sum256(append(append([]byte(*sign), []byte(*user)...), []byte(*color)...))
@@ -58,32 +66,22 @@ func bringOffline(hash string, u userInfo) {
 
 func processNotes(response MsgRecord) {
 	for _, note := range response.PendingNotes {
-		if seenNotes[note.DedupHash] {
+		if _, seen := seenNotes[note.DedupHash]; seen {
 			continue
 		}
+		seenNotes[note.DedupHash] = struct{}{}
 
-		// user hashes are 8 bytes long; if it's not that, assume it's a message from the server to print
-		// there is no usage of this feature (yet)
-		if rawNote, _ := hex.DecodeString(note.Referent); len(rawNote) != 8 {
-			seenNotes[note.DedupHash] = true
-			tuiPrint(note.Info)
-			continue
-		}
-		u, known := mixedHashToUser[note.Referent]
-
-		if !known {
-			continue
-		}
-
-		seenNotes[note.DedupHash] = true
-		_, isOnline := onlineUsers[note.Referent]
-		switch note.Info {
-		case "online":
-			if !isOnline {
-				bringOnline(note.Referent, u)
+		if len(note.Payload) > 0 {
+			u := decryptUserBlob(note.Payload)
+			if u == nil {
+				continue
 			}
-		case "offline":
-			if isOnline {
+			mixedHashToUser[note.Referent] = *u
+			if _, isOnline := onlineUsers[note.Referent]; !isOnline {
+				bringOnline(note.Referent, *u)
+			}
+		} else {
+			if u, isOnline := onlineUsers[note.Referent]; isOnline {
 				bringOffline(note.Referent, u)
 			}
 		}
@@ -168,18 +166,49 @@ func runClientSender(msg string) {
 	ph := personalHash()
 	// send passHash + personalHash + encrypted message
 	payload := append(append(hash, ph...), encryptToBytes(jsonBytes, []byte(*pass))...)
-	responseBytes := sendBytes(payload, *ip)
+	responseBytes := sendPacket(magicMsgBytes, payload, *ip)
 	if responseBytes != nil {
 		handleResponse(responseBytes)
 		isMsgOutgoing = false
 	}
 }
 
+func sendHandshake() {
+	ub, _ := json.Marshal(UserBlob{User: *user, Color: *color})
+	blob := encryptToBytes(ub, []byte(*pass))
+	payload := append(append(passHash(*pass), personalHash()...), blob...)
+	responseBytes := sendPacket(magicHsBytes, payload, *ip)
+	if responseBytes == nil {
+		return
+	}
+	decrypted := decryptFromBytes(responseBytes, passHash(*pass))
+	type handshakeResponse struct {
+		Total int         `json:"t"`
+		Users []UserEntry `json:"u"`
+	}
+	var resp handshakeResponse
+	if err := json.Unmarshal(decrypted, &resp); err != nil {
+		return
+	}
+	for _, u := range resp.Users {
+		info := decryptUserBlob(u.Blob)
+		if info == nil {
+			continue
+		}
+		info.Loc = ""
+		mixedHashToUser[u.Hash] = *info
+		bringOnline(u.Hash, *info)
+	}
+	if resp.Total > len(resp.Users) {
+		tuiPrint(fmt.Sprintf("[slategray]%d users not loaded", resp.Total-len(resp.Users)))
+	}
+}
+
 func runClientListener() {
 	// every 200ms send a poll with passHash + personalHash
 	for {
-		poll := append(passHash(*pass), personalHash()...)
-		responseBytes := sendBytes(poll, *ip)
+		pollPayload := append(passHash(*pass), personalHash()...)
+		responseBytes := sendPacket(magicPollBytes, pollPayload, *ip)
 		if responseBytes != nil {
 			handleResponse(responseBytes)
 		}
@@ -194,6 +223,7 @@ func formatTimestamp(ts int64) string {
 
 func runClient() {
 	initTUI(runClientSender)
+	sendHandshake()
 	go runClientListener()
 	runTUI()
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/json"
 
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/scrypt"
@@ -24,15 +25,14 @@ func encryptToBytes(data []byte, pass []byte) []byte {
 }
 
 func extractHash(data []byte) []byte {
-	return data[:32]
+	return data[:16]
 }
 
 func passHash(pass string) []byte {
 	hash := sha256.Sum256([]byte(pass))
-	return hash[:]
+	return hash[:16]
 }
 
-// this works fine
 func decryptFromBytes(ct []byte, pass []byte) []byte {
 	key := deriveKey(pass)
 	if len(ct) == 0 {
@@ -46,7 +46,7 @@ func decryptFromBytes(ct []byte, pass []byte) []byte {
 }
 
 func decryptUsingPass(data []byte, pass string) string {
-	if len(data) < 32 {
+	if len(data) < 16 {
 		return ""
 	}
 	key := deriveKey([]byte(pass))
@@ -60,4 +60,13 @@ func decryptUsingPass(data []byte, pass string) string {
 		return err.Error()
 	}
 	return string(plain)
+}
+
+func decryptUserBlob(blob []byte) *userInfo {
+	plain := decryptUsingPass(blob, *pass)
+	var ub UserBlob
+	if err := json.Unmarshal([]byte(plain), &ub); err != nil {
+		return nil
+	}
+	return &userInfo{User: ub.User, Color: ub.Color}
 }

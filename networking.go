@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"fmt"
 	"net"
 	"os"
@@ -8,6 +10,11 @@ import (
 	"strings"
 	"time"
 )
+
+func genMagicBytes(sauce string) []byte {
+	h := sha256.Sum256([]byte(sauce))
+	return h[:4]
+}
 
 func makeChecksum(b []byte) uint16 {
 	s := uint32(0)
@@ -31,13 +38,18 @@ func enableKernelReplies(val bool) {
 	fmt.Println("successfully set kernel icmp replies to " + strconv.FormatBool(val))
 }
 
-func sendBytes(data []byte, dest string) []byte {
-	buf := make([]byte, len(data)+11)
+func buildPacket(magic []byte, data []byte) []byte {
+	buf := make([]byte, 12+len(data))
 	buf[0] = 8
-	buf[9], buf[10] = 0x4F, 0x4B
-	copy(buf[11:], data)
+	copy(buf[8:12], magic)
+	copy(buf[12:], data)
 	s := makeChecksum(buf)
 	buf[2], buf[3] = byte(s>>8), byte(s)
+	return buf
+}
+
+func sendPacket(magic []byte, data []byte, dest string) []byte {
+	buf := buildPacket(magic, data)
 
 	c, err := net.ListenPacket("ip4:icmp", "0.0.0.0")
 	processErr(err)
@@ -49,24 +61,37 @@ func sendBytes(data []byte, dest string) []byte {
 	recv := make([]byte, 1500)
 	c.SetReadDeadline(time.Now().Add(3 * time.Second))
 	for {
-		n, addr, err := c.ReadFrom(recv)
-		if err != nil {
-			if !strings.Contains(err.Error(), "timeout") {
-				tuiPrint("Error: " + err.Error())
+		n, addr, netErr := c.ReadFrom(recv)
+		if netErr != nil {
+			if !strings.Contains(netErr.Error(), "timeout") {
+				tuiPrint("Error: " + netErr.Error())
 			}
 			isMsgOutgoing = false
 			setConnectedStatus(false)
 			return nil
 		}
-		if n < 11 || recv[0] != 0 || addr.String() != dest || recv[9] != 0x4F || recv[10] != 0x4B {
+		if n < 12 || recv[0] != 0 || addr.String() != dest || !bytes.Equal(recv[8:12], magic) {
 			continue
 		}
 		setConnectedStatus(true)
-		return recv[11:n]
+		return recv[12:n]
 	}
 }
 
 func listenForPackets() {
+	type handler func(net.Addr, []byte) []byte
+	type route struct {
+		magic []byte
+		fn    handler
+	}
+
+	routes := []route{
+		{magicPollBytes, handlePoll},
+		{magicMsgBytes, handleMessage},
+		{magicHsBytes, handleHandshake},
+		{magicInfoBytes, handleInfoPing},
+	}
+
 	c, err := net.ListenPacket("ip4:icmp", "0.0.0.0")
 	processErr(err)
 	defer c.Close()
@@ -74,37 +99,21 @@ func listenForPackets() {
 	buf := make([]byte, 1500)
 	for {
 		n, addr, _ := c.ReadFrom(buf)
-		if n < 8 || buf[0] != 8 { // check for malformed pings
+		if n < 12 || buf[0] != 8 {
 			continue
 		}
-		var msg []byte
-		if n >= 11 && buf[9] == im1 && buf[10] == im2 {
-			msg := buildInfoReply(addr.String())
-			reply := make([]byte, 11+len(msg))
-			reply[0] = 0
-			reply[9], reply[10] = im1, im2
-			copy(reply[4:8], buf[4:8])
-			copy(reply[11:], msg)
-			reply[2], reply[3] = 0, 0
-			s := makeChecksum(reply)
-			reply[2], reply[3] = byte(s>>8), byte(s)
-			c.WriteTo(reply, addr)
-		} else if n >= 11 && buf[9] == 0x4F && buf[10] == 0x4B { // check for magic numbers to differentiate from normal pings
-			payload := make([]byte, n-11)
-			copy(payload, buf[11:n])
-			fmt.Printf("%s: (%d bytes)\n", addr, len(payload))
-			msg = sendReply(addr.String(), payload) // send the formatted info to the server code to deal with
-			reply := make([]byte, 11+len(msg))
-			reply[0] = 0
-			reply[9], reply[10] = 0x4F, 0x4B // pack magic numbers into reply
-			copy(reply[4:8], buf[4:8])
-			copy(reply[11:], msg)
-			reply[2], reply[3] = 0, 0
-			s := makeChecksum(reply)
-			reply[2], reply[3] = byte(s>>8), byte(s)
-			c.WriteTo(reply, addr)
-		} else {
-			// respond to normal pings with just the text they sent
+		magic := buf[8:12]
+		payload := make([]byte, n-12)
+		copy(payload, buf[12:n])
+
+		var matched handler
+		for _, r := range routes {
+			if bytes.Equal(magic, r.magic) {
+				matched = r.fn
+				break
+			}
+		}
+		if matched == nil {
 			reply := make([]byte, n)
 			reply[0] = 0
 			copy(reply[4:], buf[4:n])
@@ -112,12 +121,15 @@ func listenForPackets() {
 			s := makeChecksum(reply)
 			reply[2], reply[3] = byte(s>>8), byte(s)
 			c.WriteTo(reply, addr)
+			continue
 		}
+		result := matched(addr, payload)
+		reply := buildPacket(magic, result)
+		copy(reply[4:8], buf[4:8])
+		s := makeChecksum(reply)
+		reply[2], reply[3] = byte(s>>8), byte(s)
+		c.WriteTo(reply, addr)
 	}
-}
-
-func sendString(data string, dest string) string {
-	return string(sendBytes([]byte(data), dest))
 }
 
 func processErr(err error) {
