@@ -30,7 +30,9 @@ func main() {
 		enableKernelReplies(false)
 		listenForPackets()
 	} else if *sign != "" && *ip != "" && *user != "" && *pass != "" {
-		runClient()
+		initTUI(runClientSender)
+		go func() { sendHandshake(); runClientListener() }()
+		runTUI()
 	} else {
 		fmt.Println("------\nYou need to specify server ip, user, pass, and sign\n------")
 		flag.Usage()
