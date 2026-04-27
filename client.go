@@ -35,7 +35,7 @@ var seenNotes = map[string]struct{}{}       // cache of note dedups sent by serv
 var onlineUsers = map[string]userInfo{}     // cache of known users currently online - list of userInfos
 
 func sendInfoPing(dest string) string {
-	return string(sendPacket(magicInfoBytes, []byte{}, dest))
+	return string(sendPacket("info", []byte{}, dest))
 }
 
 func personalHash() []byte {
@@ -164,7 +164,7 @@ func runClientSender(msg string) {
 	ph := personalHash()
 	// send passHash + personalHash + encrypted message
 	payload := append(append(hash, ph...), encryptToBytes(jsonBytes, []byte(*pass))...)
-	responseBytes := sendPacket(magicMsgBytes, payload, *ip)
+	responseBytes := sendPacket("msg", payload, *ip)
 	if responseBytes != nil {
 		handleResponse(responseBytes)
 		isMsgOutgoing = false
@@ -175,7 +175,7 @@ func sendHandshake() {
 	ub, _ := json.Marshal(UserBlob{User: *user, Color: *color})
 	blob := encryptToBytes(ub, []byte(*pass))
 	payload := append(append(passHash(*pass), personalHash()...), blob...)
-	responseBytes := sendPacket(magicHsBytes, payload, *ip)
+	responseBytes := sendPacket("shake", payload, *ip)
 	if responseBytes == nil {
 		return
 	}
@@ -206,7 +206,7 @@ func runClientListener() {
 	// every 200ms send a poll with passHash + personalHash
 	for {
 		pollPayload := append(passHash(*pass), personalHash()...)
-		responseBytes := sendPacket(magicPollBytes, pollPayload, *ip)
+		responseBytes := sendPacket("poll", pollPayload, *ip)
 		if responseBytes != nil {
 			handleResponse(responseBytes)
 		}
