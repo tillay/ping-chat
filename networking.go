@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
+	"math/rand"
 	"net"
 	"os"
 	"strconv"
@@ -11,16 +12,39 @@ import (
 	"time"
 )
 
-var (
-	magicPollBytes = genMagicBytes("poll")
-	magicMsgBytes  = genMagicBytes("msg")
-	magicHsBytes   = genMagicBytes("shake")
-	magicInfoBytes = genMagicBytes("info")
-)
+func magicPool(sauce string, hour int64) []byte {
+	seed := sha256.Sum256([]byte(sauce + strconv.FormatInt(hour, 10)))
+	pool := seed[:]
+	for len(pool) < 512 {
+		next := sha256.Sum256(pool)
+		pool = append(pool, next[:]...)
+	}
+	return pool[:512]
+}
 
-func genMagicBytes(sauce string) []byte {
-	h := sha256.Sum256([]byte(sauce))
-	return h[:4]
+func currentHour() int64 {
+	return time.Now().UTC().Unix() / 3600
+}
+
+func randomMagic(sauce string) []byte {
+	pool := magicPool(sauce, currentHour())
+	offset := rand.Intn(len(pool)/4) * 4
+	return pool[offset : offset+4]
+}
+
+func matchSauce(magic []byte, sauces []string) string {
+	hour := currentHour()
+	for _, h := range []int64{hour, hour - 1} {
+		for _, s := range sauces {
+			pool := magicPool(s, h)
+			for i := 0; i+4 <= len(pool); i += 4 {
+				if bytes.Equal(magic, pool[i:i+4]) {
+					return s
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func makeChecksum(b []byte) uint16 {
@@ -55,7 +79,8 @@ func buildPacket(magic []byte, data []byte) []byte {
 	return buf
 }
 
-func sendPacket(magic []byte, data []byte, dest string) []byte {
+func sendPacket(sauce string, data []byte, dest string) []byte {
+	magic := randomMagic(sauce)
 	buf := buildPacket(magic, data)
 
 	c, err := net.ListenPacket("ip4:icmp", "0.0.0.0")
@@ -77,7 +102,7 @@ func sendPacket(magic []byte, data []byte, dest string) []byte {
 			setConnectedStatus(false)
 			return nil
 		}
-		if n < 12 || recv[0] != 0 || addr.String() != dest || !bytes.Equal(recv[8:12], magic) {
+		if n < 12 || recv[0] != 0 || addr.String() != dest || matchSauce(recv[8:12], []string{sauce}) == "" {
 			continue
 		}
 		setConnectedStatus(true)
@@ -87,40 +112,33 @@ func sendPacket(magic []byte, data []byte, dest string) []byte {
 
 func listenForPackets() {
 	type handler func(net.Addr, []byte) []byte
-	type route struct {
-		magic []byte
-		fn    handler
-	}
 
-	routes := []route{
-		{magicPollBytes, handlePoll},
-		{magicMsgBytes, handleMessage},
-		{magicHsBytes, handleHandshake},
-		{magicInfoBytes, handleInfoPing},
+	handlers := map[string]handler{
+		"poll":  handlePoll,
+		"msg":   handleMessage,
+		"shake": handleHandshake,
+		"info":  handleInfoPing,
 	}
+	sauces := []string{"poll", "msg", "shake", "info"}
 
 	c, err := net.ListenPacket("ip4:icmp", "0.0.0.0")
 	processErr(err)
 	defer c.Close()
 
+	// do not touch. it will break. this code is hanging on by a thread
 	buf := make([]byte, 1500)
 	for {
 		n, addr, _ := c.ReadFrom(buf)
 		if n < 12 || buf[0] != 8 {
 			continue
 		}
-		magic := buf[8:12]
+		magic := make([]byte, 4)
+		copy(magic, buf[8:12])
 		payload := make([]byte, n-12)
 		copy(payload, buf[12:n])
 
-		var matched handler
-		for _, r := range routes {
-			if bytes.Equal(magic, r.magic) {
-				matched = r.fn
-				break
-			}
-		}
-		if matched == nil {
+		sauce := matchSauce(magic, sauces)
+		if sauce == "" {
 			reply := make([]byte, n)
 			reply[0] = 0
 			copy(reply[4:], buf[4:n])
@@ -130,7 +148,7 @@ func listenForPackets() {
 			c.WriteTo(reply, addr)
 			continue
 		}
-		result := matched(addr, payload)
+		result := handlers[sauce](addr, payload)
 		reply := buildPacket(magic, result)
 		reply[0] = 0
 		copy(reply[4:8], buf[4:8])
