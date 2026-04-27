@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-var seq uint16
-
 func magicPool(sauce string, hour int64) []byte {
 	seed := sha256.Sum256([]byte(sauce + strconv.FormatInt(hour, 10)))
 	pool := seed[:]
@@ -74,8 +72,6 @@ func enableKernelReplies(val bool) {
 func buildPacket(magic []byte, data []byte) []byte {
 	buf := make([]byte, 12+len(data))
 	buf[0] = 8
-	seq++
-	buf[6], buf[7] = byte(seq>>8), byte(seq)
 	copy(buf[8:12], magic)
 	copy(buf[12:], data)
 	s := makeChecksum(buf)
