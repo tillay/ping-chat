@@ -76,6 +76,7 @@ func processNotes(response MsgRecord) {
 			if u == nil {
 				continue
 			}
+			u.Loc = note.Loc
 			mixedHashToUser[note.Referent] = *u
 			if _, isOnline := onlineUsers[note.Referent]; !isOnline {
 				bringOnline(note.Referent, *u)
@@ -195,7 +196,7 @@ func sendHandshake() {
 		if info == nil {
 			continue
 		}
-		info.Loc = ""
+		info.Loc = u.Loc
 		mixedHashToUser[u.Hash] = *info
 		bringOnline(u.Hash, *info)
 	}
@@ -219,11 +220,4 @@ func runClientListener() {
 func formatTimestamp(ts int64) string {
 	t := time.Unix(ts, 0)
 	return fmt.Sprintf("%d. %s %d, %02d:%02d", t.Day(), t.Month().String(), t.Year(), t.Hour(), t.Minute())
-}
-
-func runClient() {
-	initTUI(runClientSender)
-	sendHandshake()
-	go runClientListener()
-	runTUI()
 }

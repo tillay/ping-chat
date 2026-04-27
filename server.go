@@ -17,12 +17,14 @@ type NoteEntry struct {
 	DedupHash string `json:"d"`
 	Referent  string `json:"r"`
 	Payload   []byte `json:"b,omitempty"`
+	Loc       string `json:"l,omitempty"`
 	CreatedAt int64  `json:"-"`
 }
 
 type UserEntry struct {
 	Hash string `json:"x"`
 	Blob []byte `json:"b"`
+	Loc  string `json:"l,omitempty"`
 	Seen int64  `json:"-"`
 }
 
@@ -96,13 +98,16 @@ func sweepRecord(record *MsgRecord, senderMixed string) {
 	if u == nil || now-u.Seen > 2 {
 		purgeNotesForHash(record, senderMixed)
 		var blob []byte
+		var loc string
 		if u != nil {
 			blob = u.Blob
+			loc = u.Loc
 		}
 		record.PendingNotes = append(record.PendingNotes, NoteEntry{
 			DedupHash: dedupHash(),
 			Referent:  senderMixed,
 			Payload:   blob,
+			Loc:       loc,
 			CreatedAt: now,
 		})
 	}
@@ -139,9 +144,6 @@ func handlePoll(addr net.Addr, payload []byte) []byte {
 	key := extractHash(payload)
 	record := getOrCreateRecord(key, addr.String())
 	senderMixed := mixedHash(addr.String(), payload[16:32])
-	if u := findUser(&record, senderMixed); u != nil {
-		u.Seen = time.Now().Unix()
-	}
 	sweepRecord(&record, senderMixed)
 	return saveAndReply(record, key)
 }
@@ -153,9 +155,6 @@ func handleMessage(addr net.Addr, payload []byte) []byte {
 	key := extractHash(payload)
 	record := getOrCreateRecord(key, addr.String())
 	senderMixed := mixedHash(addr.String(), payload[16:32])
-	if u := findUser(&record, senderMixed); u != nil {
-		u.Seen = time.Now().Unix()
-	}
 	sweepRecord(&record, senderMixed)
 	record.MsgPayload = payload[32:]
 	record.MsgIp = addr.String()
@@ -173,18 +172,22 @@ func handleHandshake(addr net.Addr, payload []byte) []byte {
 	record := getOrCreateRecord(key, addr.String())
 	senderMixed := mixedHash(addr.String(), payload[16:32])
 	userBlob := payload[32:]
+	loc := getIpLocation(addr.String())
 
 	u := findUser(&record, senderMixed)
 	if u == nil {
+		// Seen left at zero so sweepRecord sees the user as new and emits an online note
 		record.KnownUsers = append(record.KnownUsers, UserEntry{
 			Hash: senderMixed,
 			Blob: userBlob,
-			Seen: time.Now().Unix(),
+			Loc:  loc,
 		})
 	} else {
 		u.Blob = userBlob
-		u.Seen = time.Now().Unix()
+		u.Loc = loc
+		// Seen NOT updated here; sweepRecord will emit an online note if they were away
 	}
+	sweepRecord(&record, senderMixed)
 	store[string(key)] = record
 
 	active := make([]UserEntry, 0)
@@ -196,7 +199,8 @@ func handleHandshake(addr net.Addr, payload []byte) []byte {
 	sort.Slice(active, func(i, j int) bool {
 		return active[i].Seen > active[j].Seen
 	})
-	if len(active) > 12 {
+	totalActive := len(active)
+	if totalActive > 12 {
 		active = active[:12]
 	}
 
@@ -205,7 +209,7 @@ func handleHandshake(addr net.Addr, payload []byte) []byte {
 		Users []UserEntry `json:"u"`
 	}
 	resp, _ := json.Marshal(handshakeResponse{
-		Total: len(record.KnownUsers),
+		Total: totalActive,
 		Users: active,
 	})
 	return encryptToBytes(resp, key)
