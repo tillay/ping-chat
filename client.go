@@ -204,18 +204,18 @@ func sendHandshake() {
 }
 
 func runClientListener() {
-	// every 200ms send a poll with passHash + personalHash
+	// send a poll with passHash + personalHash + dummy bytes a few times a second with randomish delay
 	for {
-		salt := make([]byte, 5+rand.IntN(16))
+		salt := make([]byte, 36)
 		for i := range salt {
-			salt[i] = byte(rand.UintN(256))
+			salt[i] = byte(0x10 + i%0x28)
 		}
 		pollPayload := append(append(passHash(*pass), personalHash()...), salt...)
 		responseBytes := sendPacket("poll", pollPayload, *ip)
 		if responseBytes != nil {
 			handleResponse(responseBytes)
 		}
-		time.Sleep(time.Second / 5)
+		time.Sleep(time.Duration(160+rand.IntN(161)) * time.Millisecond)
 	}
 }
 
