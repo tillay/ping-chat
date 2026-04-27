@@ -17,13 +17,6 @@ var (
 	sign   = flag.String("sign", "", "signature to sign messages with (do not share)")
 )
 
-var (
-	magicPollBytes = genMagicBytes("poll")
-	magicMsgBytes  = genMagicBytes("msg")
-	magicHsBytes   = genMagicBytes("shake")
-	magicInfoBytes = genMagicBytes("info")
-)
-
 func main() {
 	flag.Parse()
 	if *server {

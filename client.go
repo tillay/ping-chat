@@ -43,17 +43,12 @@ func personalHash() []byte {
 	return h[:16]
 }
 
-func redrawUserView() {
-	usersView.SetText("")
-	for _, u := range onlineUsers {
-		fmt.Fprintf(usersView, "[%s]%s[white]\n%s\n\n", u.Color, u.User, u.Loc)
-	}
-}
-
 func bringOnline(hash string, u userInfo) {
 	onlineUsers[hash] = u
 	app.QueueUpdateDraw(redrawUserView)
-	if u.User != *user {
+
+	// the len(firstSeenHash) check checks to make sure it doesn't print before any normal messages (user just joined convo)
+	if u.User != *user && len(firstSeenHash) != 0 {
 		tuiPrint("[slategray]" + u.User + " came online")
 	}
 }
@@ -61,7 +56,9 @@ func bringOnline(hash string, u userInfo) {
 func bringOffline(hash string, u userInfo) {
 	delete(onlineUsers, hash)
 	app.QueueUpdateDraw(redrawUserView)
-	tuiPrint("[slategray]" + u.User + " went offline")
+	if len(firstSeenHash) != 0 {
+		tuiPrint("[slategray]" + u.User + " went offline")
+	}
 }
 
 func processNotes(response MsgRecord) {

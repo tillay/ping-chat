@@ -11,6 +11,13 @@ import (
 	"time"
 )
 
+var (
+	magicPollBytes = genMagicBytes("poll")
+	magicMsgBytes  = genMagicBytes("msg")
+	magicHsBytes   = genMagicBytes("shake")
+	magicInfoBytes = genMagicBytes("info")
+)
+
 func genMagicBytes(sauce string) []byte {
 	h := sha256.Sum256([]byte(sauce))
 	return h[:4]

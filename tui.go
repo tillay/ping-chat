@@ -25,6 +25,16 @@ func newView() *tview.TextView {
 func initTUI(onSend func(string)) {
 	app = tview.NewApplication()
 	app.EnableMouse(true)
+	app.SetMouseCapture(func(event *tcell.EventMouse, action tview.MouseAction) (*tcell.EventMouse, tview.MouseAction) {
+		switch action {
+		case tview.MouseLeftDown, tview.MouseLeftClick,
+			tview.MouseRightDown, tview.MouseRightClick,
+			tview.MouseMiddleDown, tview.MouseMiddleClick:
+			return nil, action
+		}
+		return event, action
+	})
+
 	tview.Styles.PrimitiveBackgroundColor = tcell.ColorDefault
 
 	msgView, usersView, statusView = newView(), newView(), newView()
@@ -82,19 +92,20 @@ func tuiPrint(line string) {
 	}
 }
 
-func userViewPrint(line string) {
-	app.QueueUpdateDraw(func() {
-		fmt.Fprintf(usersView, "%s\n", line)
-	})
+func redrawUserView() {
+	usersView.SetText("")
+	for _, u := range onlineUsers {
+		fmt.Fprintf(usersView, "[%s]%s[white]\n%s\n\n", u.Color, u.User, u.Loc)
+	}
 }
 
 func setConnectedStatus(status bool) {
 	if *server {
 		return
 	}
-	statusText := "[green]⬤[white]  Connected"
+	statusText := "[green]✔[white] Connected"
 	if status == false {
-		statusText = "[red]⬤[white]  Not connected"
+		statusText = "[red]✘[white] Not connected"
 	}
 	statusView.SetText(statusText)
 }
