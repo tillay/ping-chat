@@ -18,7 +18,6 @@ type ChatMessage struct {
 type UserBlob struct {
 	User  string `json:"u"`
 	Color string `json:"c"`
-	Salt  []byte `json:"s"`
 }
 
 type userInfo struct {
