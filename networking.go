@@ -24,18 +24,18 @@ func magicPool(sauce string, hour int64) []byte {
 	return pool[:512]
 }
 
-func currentMin() int64 {
-	return time.Now().UTC().Unix() / 216000
+func currentHour() int64 {
+	return time.Now().UTC().Unix() / 3600
 }
 
 func randomMagic(sauce string) []byte {
-	pool := magicPool(sauce, currentMin())
+	pool := magicPool(sauce, currentHour())
 	offset := rand.Intn(len(pool)/4) * 4
 	return pool[offset : offset+4]
 }
 
 func matchSauce(magic []byte, sauces []string) string {
-	hour := currentMin()
+	hour := currentHour()
 	for _, h := range []int64{hour, hour - 1} {
 		for _, s := range sauces {
 			pool := magicPool(s, h)
