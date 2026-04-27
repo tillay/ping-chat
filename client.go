@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"math/rand/v2"
 	"sync"
 	"time"
 )
@@ -17,17 +18,18 @@ type ChatMessage struct {
 type UserBlob struct {
 	User  string `json:"u"`
 	Color string `json:"c"`
+	Salt  []byte `json:"s"`
 }
-
-var lastTimestamp int64
-var isMsgOutgoing = false
-var mu sync.Mutex
 
 type userInfo struct {
 	Color string
 	User  string
 	Loc   string
 }
+
+var lastTimestamp int64
+var isMsgOutgoing = false
+var mu sync.Mutex
 
 var firstSeenHash = map[string]string{}     // first hash seen for each username
 var mixedHashToUser = map[string]userInfo{} // user name, color, loc based on mixed hash
@@ -205,7 +207,11 @@ func sendHandshake() {
 func runClientListener() {
 	// every 200ms send a poll with passHash + personalHash
 	for {
-		pollPayload := append(passHash(*pass), personalHash()...)
+		salt := make([]byte, 5+rand.IntN(16))
+		for i := range salt {
+			salt[i] = byte(rand.UintN(256))
+		}
+		pollPayload := append(append(passHash(*pass), personalHash()...), salt...)
 		responseBytes := sendPacket("poll", pollPayload, *ip)
 		if responseBytes != nil {
 			handleResponse(responseBytes)

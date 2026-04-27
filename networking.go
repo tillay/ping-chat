@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+var seq uint16
+
 func magicPool(sauce string, hour int64) []byte {
 	seed := sha256.Sum256([]byte(sauce + strconv.FormatInt(hour, 10)))
 	pool := seed[:]
@@ -22,18 +24,18 @@ func magicPool(sauce string, hour int64) []byte {
 	return pool[:512]
 }
 
-func currentHour() int64 {
-	return time.Now().UTC().Unix() / 3600
+func currentMin() int64 {
+	return time.Now().UTC().Unix() / 216000
 }
 
 func randomMagic(sauce string) []byte {
-	pool := magicPool(sauce, currentHour())
+	pool := magicPool(sauce, currentMin())
 	offset := rand.Intn(len(pool)/4) * 4
 	return pool[offset : offset+4]
 }
 
 func matchSauce(magic []byte, sauces []string) string {
-	hour := currentHour()
+	hour := currentMin()
 	for _, h := range []int64{hour, hour - 1} {
 		for _, s := range sauces {
 			pool := magicPool(s, h)
@@ -72,6 +74,8 @@ func enableKernelReplies(val bool) {
 func buildPacket(magic []byte, data []byte) []byte {
 	buf := make([]byte, 12+len(data))
 	buf[0] = 8
+	seq++
+	buf[6], buf[7] = byte(seq>>8), byte(seq)
 	copy(buf[8:12], magic)
 	copy(buf[12:], data)
 	s := makeChecksum(buf)
