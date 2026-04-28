@@ -206,10 +206,8 @@ func sendHandshake() {
 func runClientListener() {
 	// send a poll with passHash + personalHash + dummy bytes a few times a second with randomish delay
 	for {
-		salt := make([]byte, 36)
-		for i := range salt {
-			salt[i] = byte(0x10 + i%0x28)
-		}
+		const chars = "abcdefghij0123456789"
+		salt := []byte(chars)
 		pollPayload := append(append(passHash(*pass), personalHash()...), salt...)
 		responseBytes := sendPacket("poll", pollPayload, *ip)
 		if responseBytes != nil {
