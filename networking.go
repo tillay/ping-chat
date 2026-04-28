@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -69,9 +70,13 @@ func enableKernelReplies(val bool) {
 	fmt.Println("successfully set kernel icmp replies to " + strconv.FormatBool(val))
 }
 
+var icmpSeq uint32
+
 func buildPacket(magic []byte, data []byte) []byte {
 	buf := make([]byte, 12+len(data))
 	buf[0] = 8
+	seq := uint16(atomic.AddUint32(&icmpSeq, 1))
+	buf[6], buf[7] = byte(seq>>8), byte(seq)
 	copy(buf[8:12], magic)
 	copy(buf[12:], data)
 	s := makeChecksum(buf)
