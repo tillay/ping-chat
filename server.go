@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -146,7 +145,7 @@ func handlePoll(addr net.Addr, payload []byte) []byte {
 	record := getOrCreateRecord(key, addr.String())
 	senderMixed := mixedHash(addr.String(), payload[16:32])
 	sweepRecord(&record, senderMixed)
-	fmt.Println("Incoming polling ping from " + addr.String() + " in " + string(key) + "(" + strconv.Itoa(len(payload)) + " bytes)")
+	fmt.Printf("Incoming polling ping from %s in %x (%d bytes)\n", addr.String(), key, len(payload))
 	return saveAndReply(record, key)
 }
 
@@ -157,7 +156,7 @@ func handleMessage(addr net.Addr, payload []byte) []byte {
 	key := extractHash(payload)
 	record := getOrCreateRecord(key, addr.String())
 	senderMixed := mixedHash(addr.String(), payload[16:32])
-	fmt.Println("Incoming message from " + addr.String() + " in " + string(key) + "(" + strconv.Itoa(len(payload)) + " bytes)")
+	fmt.Printf("Incoming message from %s in %x (%d bytes)\n", addr.String(), key, len(payload))
 	sweepRecord(&record, senderMixed)
 	record.MsgPayload = payload[32:]
 	record.MsgIp = addr.String()
@@ -175,9 +174,8 @@ func handleHandshake(addr net.Addr, payload []byte) []byte {
 	record := getOrCreateRecord(key, addr.String())
 	senderMixed := mixedHash(addr.String(), payload[16:32])
 	userBlob := payload[32:]
-	fmt.Println("Incoming handshake from " + addr.String() + " in " + string(key) + "(" + strconv.Itoa(len(payload)) + " bytes)")
+	fmt.Printf("Incoming handshake from %s in %x (%d bytes)\n", addr.String(), key, len(payload))
 	loc := getIpLocation(addr.String())
-
 	u := findUser(&record, senderMixed)
 	if u == nil {
 		// Seen left at zero so sweepRecord sees the user as new and emits an online note
@@ -248,6 +246,6 @@ func buildInfoReply(info map[string]string) []byte {
 }
 
 func handleInfoPing(addr net.Addr, payload []byte) []byte {
-	fmt.Println("Incoming test ping from " + addr.String() + "(" + string(len(payload)) + " bytes)")
+	fmt.Printf("Incoming handshake from %s (%d bytes)\n", addr.String(), len(payload))
 	return buildInfoReply(getIpData(addr.String()))
 }
