@@ -26,7 +26,7 @@ func encryptToBytes(data []byte, pass []byte) []byte {
 
 // returns convoHash, senderHash
 func extractHashes(data []byte) ([]byte, []byte) {
-	return data[:16], data[16:32]
+	return deobfuscate(data[:16]), deobfuscate(data[16:32])
 }
 
 func passHash(pass string) []byte {
@@ -70,4 +70,32 @@ func decryptUserBlob(blob []byte) *userInfo {
 		return nil
 	}
 	return &userInfo{User: ub.User, Color: ub.Color}
+}
+
+func obfuscate(hash []byte) []byte {
+	nonce := make([]byte, 1)
+	rand.Read(nonce)
+	out := make([]byte, len(hash))
+	out[0] = nonce[0]
+	x := uint32(nonce[0]) ^ 0x5A827999
+	for i := 1; i < len(hash); i++ {
+		x ^= x << 13
+		x ^= x >> 17
+		x ^= x << 5
+		out[i] = hash[i] ^ byte(x)
+	}
+	return out
+}
+
+func deobfuscate(packet []byte) []byte {
+	nonce := packet[0]
+	out := make([]byte, len(packet))
+	x := uint32(nonce) ^ 0x5A827999
+	for i := 1; i < len(packet); i++ {
+		x ^= x << 13
+		x ^= x >> 17
+		x ^= x << 5
+		out[i] = packet[i] ^ byte(x)
+	}
+	return out
 }

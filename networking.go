@@ -86,7 +86,6 @@ func buildPacket(magic []byte, data []byte) []byte {
 func sendPacket(sauce string, data []byte, dest string) []byte {
 	magic := randomMagic(sauce)
 	buf := buildPacket(magic, data)
-
 	c, err := net.ListenPacket("ip4:icmp", "0.0.0.0")
 	processErr(err)
 	defer c.Close()
@@ -159,6 +158,7 @@ func listenForPackets() {
 		reply[2], reply[3] = 0, 0
 		s := makeChecksum(reply)
 		reply[2], reply[3] = byte(s>>8), byte(s)
+		fmt.Printf("Replying %s (%d bytes)\n", reply, len(reply))
 		c.WriteTo(reply, addr)
 	}
 }

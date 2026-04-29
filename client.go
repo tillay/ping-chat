@@ -92,9 +92,9 @@ func processNotes(response MsgRecord) {
 func handleResponse(responseBytes []byte) {
 	mu.Lock()
 	defer mu.Unlock()
-	passwordHashBytes := passHash(*pass)
+
 	// decrypt the message encrypted by the server using the hash of the password
-	responseStr := decryptFromBytes(responseBytes, passwordHashBytes)
+	responseStr := decryptFromBytes(responseBytes, deobfuscate(obfuscate(passHash(*pass))))
 	var serverResponse MsgRecord
 	if err := json.Unmarshal(responseStr, &serverResponse); err != nil {
 		return
@@ -164,7 +164,7 @@ func runClientSender(msg string) {
 	jsonBytes, _ := json.Marshal(msgJson)
 
 	// send passHash + personalHash + encrypted message
-	payload := append(append(passHash(*pass), personalHash()...), encryptToBytes(jsonBytes, []byte(*pass))...)
+	payload := append(append(obfuscate(passHash(*pass)), obfuscate(personalHash())...), encryptToBytes(jsonBytes, []byte(*pass))...)
 	responseBytes := sendPacket("msg", payload, *ip)
 	if responseBytes != nil {
 		handleResponse(responseBytes)
@@ -175,20 +175,21 @@ func runClientSender(msg string) {
 func sendHandshake() {
 	ub, _ := json.Marshal(UserBlob{User: *user, Color: *color})
 	blob := encryptToBytes(ub, []byte(*pass))
-	payload := append(append(passHash(*pass), personalHash()...), blob...)
+	payload := append(append(obfuscate(passHash(*pass)), obfuscate(personalHash())...), blob...)
 	responseBytes := sendPacket("shake", payload, *ip)
 	if responseBytes == nil {
 		return
 	}
-	decrypted := decryptFromBytes(responseBytes, passHash(*pass))
+	decrypted := decryptFromBytes(responseBytes, deobfuscate(obfuscate(passHash(*pass))))
 	type handshakeResponse struct {
 		Total int         `json:"t"`
 		Users []UserEntry `json:"u"`
 	}
 	var resp handshakeResponse
 	if err := json.Unmarshal(decrypted, &resp); err != nil {
-		return
+		tuiPrint(err.Error())
 	}
+
 	for _, u := range resp.Users {
 		info := decryptUserBlob(u.Blob)
 		if info == nil {
@@ -208,7 +209,7 @@ func runClientListener() {
 	for {
 		const chars = "abcdefghij0123456789"
 		salt := []byte(chars)
-		pollPayload := append(append(passHash(*pass), personalHash()...), salt...)
+		pollPayload := append(append(obfuscate(passHash(*pass)), obfuscate(personalHash())...), salt...)
 		responseBytes := sendPacket("poll", pollPayload, *ip)
 		if responseBytes != nil {
 			handleResponse(responseBytes)

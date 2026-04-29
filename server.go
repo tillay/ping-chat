@@ -135,7 +135,6 @@ func getOrCreateRecord(key []byte, ip string) MsgRecord {
 func saveAndReply(record MsgRecord, key []byte) []byte {
 	store[string(key)] = record
 	recordJson, _ := json.Marshal(record)
-	fmt.Println("Replying " + string(recordJson))
 	return encryptToBytes(recordJson, key)
 }
 
@@ -147,7 +146,7 @@ func handlePoll(addr net.Addr, payload []byte) []byte {
 	record := getOrCreateRecord(key, addr.String())
 	senderMixed = mixedHash(processHash, senderMixed)
 	sweepRecord(&record, senderMixed)
-	fmt.Printf("Incoming polling ping from %s in %x (%d bytes)\n", addr.String(), key, len(payload))
+	fmt.Printf("Incoming polling ping from %s as %x in %x (%d bytes)\n", addr.String(), senderMixed, key, len(payload))
 	return saveAndReply(record, key)
 }
 
@@ -158,7 +157,7 @@ func handleMessage(addr net.Addr, payload []byte) []byte {
 	key, senderMixed := extractHashes(payload)
 	record := getOrCreateRecord(key, addr.String())
 	senderMixed = mixedHash(processHash, senderMixed)
-	fmt.Printf("Incoming message from %s in %x (%d bytes)\n", addr.String(), key, len(payload))
+	fmt.Printf("Incoming message from %s as %x in %x (%d bytes)\n", addr.String(), senderMixed, key, len(payload))
 	sweepRecord(&record, senderMixed)
 	record.MsgPayload = payload[32:]
 	record.IpLocation = getIpLocation(addr.String())
@@ -175,7 +174,7 @@ func handleHandshake(addr net.Addr, payload []byte) []byte {
 	record := getOrCreateRecord(key, addr.String())
 	senderMixed = mixedHash(processHash, senderMixed)
 	userBlob := payload[32:]
-	fmt.Printf("Incoming handshake from %s in %x (%d bytes)\n", addr.String(), key, len(payload))
+	fmt.Printf("Incoming handshake from %s as %x in %x (%d bytes)\n", addr.String(), senderMixed, key, len(payload))
 	loc := getIpLocation(addr.String())
 	u := findUser(&record, senderMixed)
 	if u == nil {
