@@ -24,8 +24,9 @@ func encryptToBytes(data []byte, pass []byte) []byte {
 	return ct
 }
 
-func extractHash(data []byte) []byte {
-	return data[:16]
+// returns convoHash, senderHash
+func extractHashes(data []byte) ([]byte, []byte) {
+	return decypher(data[:16]), decypher(data[16:32])
 }
 
 func passHash(pass string) []byte {
@@ -69,4 +70,27 @@ func decryptUserBlob(blob []byte) *userInfo {
 		return nil
 	}
 	return &userInfo{User: ub.User, Color: ub.Color}
+}
+
+func encypher(plaintext []byte) []byte {
+	nonce := make([]byte, len(plaintext))
+	if _, err := rand.Read(nonce); err != nil {
+		return nil
+	}
+	out := make([]byte, len(nonce)+len(plaintext))
+	copy(out, nonce)
+	for i := range plaintext {
+		out[len(nonce)+i] = plaintext[i] ^ nonce[i]
+	}
+	return out
+}
+
+func decypher(ciphertext []byte) []byte {
+	half := len(ciphertext) / 2
+	nonce := ciphertext[:half]
+	out := make([]byte, half)
+	for i := range out {
+		out[i] = ciphertext[half+i] ^ nonce[i]
+	}
+	return out
 }

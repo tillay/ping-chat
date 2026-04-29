@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -15,35 +16,37 @@ import (
 
 type NoteEntry struct {
 	DedupHash string `json:"d"`
-	Referent  string `json:"r"`
+	Referent  []byte `json:"r"`
 	Payload   []byte `json:"b,omitempty"`
 	Loc       string `json:"l,omitempty"`
 	CreatedAt int64  `json:"-"`
 }
 
 type UserEntry struct {
-	Hash string `json:"x"`
+	Hash []byte `json:"x"`
 	Blob []byte `json:"b"`
 	Loc  string `json:"l,omitempty"`
 	Seen int64  `json:"-"`
 }
 
 type MsgRecord struct {
-	MsgIp         string      `json:"-"`
 	MsgPayload    []byte      `json:"p"`
 	MsgTimestamp  int64       `json:"t"`
 	IpLocation    string      `json:"l"`
-	LastMixedHash string      `json:"h"`
+	LastMixedHash []byte      `json:"h"`
 	KnownUsers    []UserEntry `json:"-"`
 	PendingNotes  []NoteEntry `json:"n"`
 }
 
 var store = map[string]MsgRecord{}
 var locationCache = map[string]map[string]string{}
+var processHash = personalHash()
 
-func mixedHash(ip string, personalHash []byte) string {
-	h := sha256.Sum256(append([]byte(ip), personalHash...))
-	return hex.EncodeToString(h[:8])
+func mixedHash(processHash []byte, personalHash []byte) []byte {
+	// processHash is changed every time the server is restarted; invalidates old signatures when changed
+	// side effect of making it much harder to reverse sender's signature
+	h := sha256.Sum256(append(processHash, personalHash...))
+	return h[:8]
 }
 
 func dedupHash() string {
@@ -52,26 +55,26 @@ func dedupHash() string {
 	return hex.EncodeToString(b)
 }
 
-func findUser(record *MsgRecord, hash string) *UserEntry {
+func findUser(record *MsgRecord, hash []byte) *UserEntry {
 	for i := range record.KnownUsers {
-		if record.KnownUsers[i].Hash == hash {
+		if bytes.Equal(record.KnownUsers[i].Hash, hash) {
 			return &record.KnownUsers[i]
 		}
 	}
 	return nil
 }
 
-func purgeNotesForHash(record *MsgRecord, hash string) {
+func purgeNotesForHash(record *MsgRecord, hash []byte) {
 	filtered := make([]NoteEntry, 0, len(record.PendingNotes))
 	for _, n := range record.PendingNotes {
-		if n.Referent != hash {
+		if !bytes.Equal(n.Referent, hash) {
 			filtered = append(filtered, n)
 		}
 	}
 	record.PendingNotes = filtered
 }
 
-func sweepRecord(record *MsgRecord, senderMixed string) {
+func sweepRecord(record *MsgRecord, senderMixed []byte) {
 	now := time.Now().Unix()
 
 	for i := range record.KnownUsers {
@@ -120,7 +123,6 @@ func getOrCreateRecord(key []byte, ip string) MsgRecord {
 	record, exists := store[string(key)]
 	if !exists {
 		record = MsgRecord{
-			MsgIp:        ip,
 			MsgTimestamp: time.Now().Unix(),
 			IpLocation:   getIpLocation(ip),
 			KnownUsers:   []UserEntry{},
@@ -141,9 +143,9 @@ func handlePoll(addr net.Addr, payload []byte) []byte {
 	if len(payload) < 32 {
 		return payload
 	}
-	key := extractHash(payload)
+	key, senderMixed := extractHashes(payload)
 	record := getOrCreateRecord(key, addr.String())
-	senderMixed := mixedHash(addr.String(), payload[16:32])
+	senderMixed = mixedHash(processHash, senderMixed)
 	sweepRecord(&record, senderMixed)
 	fmt.Printf("Incoming polling ping from %s in %x (%d bytes)\n", addr.String(), key, len(payload))
 	return saveAndReply(record, key)
@@ -153,13 +155,12 @@ func handleMessage(addr net.Addr, payload []byte) []byte {
 	if len(payload) < 32 {
 		return payload
 	}
-	key := extractHash(payload)
+	key, senderMixed := extractHashes(payload)
 	record := getOrCreateRecord(key, addr.String())
-	senderMixed := mixedHash(addr.String(), payload[16:32])
+	senderMixed = mixedHash(processHash, senderMixed)
 	fmt.Printf("Incoming message from %s in %x (%d bytes)\n", addr.String(), key, len(payload))
 	sweepRecord(&record, senderMixed)
 	record.MsgPayload = payload[32:]
-	record.MsgIp = addr.String()
 	record.IpLocation = getIpLocation(addr.String())
 	record.MsgTimestamp = time.Now().Unix()
 	record.LastMixedHash = senderMixed
@@ -170,9 +171,9 @@ func handleHandshake(addr net.Addr, payload []byte) []byte {
 	if len(payload) < 32 {
 		return payload
 	}
-	key := extractHash(payload)
+	key, senderMixed := extractHashes(payload)
 	record := getOrCreateRecord(key, addr.String())
-	senderMixed := mixedHash(addr.String(), payload[16:32])
+	senderMixed = mixedHash(processHash, senderMixed)
 	userBlob := payload[32:]
 	fmt.Printf("Incoming handshake from %s in %x (%d bytes)\n", addr.String(), key, len(payload))
 	loc := getIpLocation(addr.String())
@@ -237,15 +238,12 @@ func getIpLocation(ip string) string {
 	return ipData["city"] + ", " + ipData["country"]
 }
 
-func buildInfoReply(info map[string]string) []byte {
+func handleInfoPing(addr net.Addr, payload []byte) []byte {
+	fmt.Printf("Incoming handshake from %s (%d bytes)\n", addr.String(), len(payload))
+	info := getIpData(addr.String())
 	org := info["org"]
 	if idx := strings.Index(org, " "); idx != -1 {
 		org = org[idx+1:]
 	}
 	return []byte(info["ip"] + " | " + info["city"] + ", " + info["region"] + ", " + info["country"] + " | " + org)
-}
-
-func handleInfoPing(addr net.Addr, payload []byte) []byte {
-	fmt.Printf("Incoming handshake from %s (%d bytes)\n", addr.String(), len(payload))
-	return buildInfoReply(getIpData(addr.String()))
 }

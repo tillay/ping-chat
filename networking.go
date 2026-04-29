@@ -67,7 +67,6 @@ func enableKernelReplies(val bool) {
 	}
 	err := os.WriteFile("/proc/sys/net/ipv4/icmp_echo_ignore_all", []byte(option), 0644)
 	processErr(err)
-	fmt.Println("successfully set kernel icmp replies to " + strconv.FormatBool(val))
 }
 
 var icmpSeq uint32

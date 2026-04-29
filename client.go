@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -30,7 +31,7 @@ var lastTimestamp int64
 var isMsgOutgoing = false
 var mu sync.Mutex
 
-var firstSeenHash = map[string]string{}     // first hash seen for each username
+var firstSeenHash = map[string][]byte{}     // first hash seen for each username
 var mixedHashToUser = map[string]userInfo{} // user name, color, loc based on mixed hash
 var seenNotes = map[string]struct{}{}       // cache of note dedups sent by server
 var onlineUsers = map[string]userInfo{}     // cache of known users currently online - list of userInfos
@@ -40,12 +41,12 @@ func sendInfoPing(dest string) string {
 }
 
 func personalHash() []byte {
-	h := sha256.Sum256(append(append([]byte(*sign), []byte(*user)...), []byte(*color)...))
+	h := sha256.Sum256(append([]byte(*sign), []byte(*user)...))
 	return h[:16]
 }
 
-func bringOnline(hash string, u userInfo) {
-	onlineUsers[hash] = u
+func bringOnline(hash []byte, u userInfo) {
+	onlineUsers[string(hash)] = u
 	app.QueueUpdateDraw(redrawUserView)
 
 	// the len(firstSeenHash) check checks to make sure it doesn't print before any normal messages (user just joined convo)
@@ -54,8 +55,8 @@ func bringOnline(hash string, u userInfo) {
 	}
 }
 
-func bringOffline(hash string, u userInfo) {
-	delete(onlineUsers, hash)
+func bringOffline(hash []byte, u userInfo) {
+	delete(onlineUsers, string(hash))
 	app.QueueUpdateDraw(redrawUserView)
 	if len(firstSeenHash) != 0 {
 		tuiPrint("[slategray]" + u.User + " went offline")
@@ -75,12 +76,12 @@ func processNotes(response MsgRecord) {
 				continue
 			}
 			u.Loc = note.Loc
-			mixedHashToUser[note.Referent] = *u
-			if _, isOnline := onlineUsers[note.Referent]; !isOnline {
+			mixedHashToUser[string(note.Referent)] = *u
+			if _, isOnline := onlineUsers[string(note.Referent)]; !isOnline {
 				bringOnline(note.Referent, *u)
 			}
 		} else {
-			if u, isOnline := onlineUsers[note.Referent]; isOnline {
+			if u, isOnline := onlineUsers[string(note.Referent)]; isOnline {
 				bringOffline(note.Referent, u)
 			}
 		}
@@ -105,7 +106,7 @@ func handleResponse(responseBytes []byte) {
 	msgTextStr := decryptUsingPass(serverResponse.MsgPayload, *pass)
 	json.Unmarshal([]byte(msgTextStr), &lastMessage)
 
-	convoIsNotNew := serverResponse.LastMixedHash != "" && lastMessage.User != ""
+	convoIsNotNew := serverResponse.LastMixedHash != nil && lastMessage.User != ""
 
 	// now we have both lastMessage (extends ChatMessage) and serverResponse (extends MsgRecord)
 	// (this is where the fun begins)
@@ -122,7 +123,7 @@ func handleResponse(responseBytes []byte) {
 		}
 
 		// add the user data for this message to the lookup map for hash -> user info
-		mixedHashToUser[serverResponse.LastMixedHash] = userInfo{lastMessage.Color, lastMessage.User, serverResponse.IpLocation}
+		mixedHashToUser[string(serverResponse.LastMixedHash)] = userInfo{lastMessage.Color, lastMessage.User, serverResponse.IpLocation}
 
 		// check if this hash has been seen before; if it hasn't, add it to the lookup map for hash -> first user seen with that hash
 		// and also set the user to be online (quietly because it's assuming based only on message recency)
@@ -133,8 +134,8 @@ func handleResponse(responseBytes []byte) {
 
 			// if the message was sent in the last 20 seconds OR the message was sent by the user, set the sender to online (quietly)
 			if time.Now().Unix()-serverResponse.MsgTimestamp <= 20 || lastMessage.User == *user {
-				if _, online := onlineUsers[serverResponse.LastMixedHash]; !online {
-					onlineUsers[serverResponse.LastMixedHash] = userInfo{lastMessage.Color, lastMessage.User, serverResponse.IpLocation}
+				if _, online := onlineUsers[string(serverResponse.LastMixedHash)]; !online {
+					onlineUsers[string(serverResponse.LastMixedHash)] = userInfo{lastMessage.Color, lastMessage.User, serverResponse.IpLocation}
 					app.QueueUpdateDraw(redrawUserView)
 				}
 			}
@@ -149,7 +150,7 @@ func handleResponse(responseBytes []byte) {
 	// this block is run IF THERE IS A NEW MESSAGE
 	if serverResponse.MsgTimestamp != lastTimestamp {
 		if convoIsNotNew {
-			if first := firstSeenHash[lastMessage.User]; first != serverResponse.LastMixedHash {
+			if first := firstSeenHash[lastMessage.User]; !bytes.Equal(first, serverResponse.LastMixedHash) {
 				tuiPrint("[yellow]" + lastMessage.User + " has invalid signature")
 			}
 			tuiPrint("[-:-:-][" + lastMessage.Color + "]" + lastMessage.User + "[-:-:-][white]: " + lastMessage.Message)
@@ -161,10 +162,9 @@ func handleResponse(responseBytes []byte) {
 func runClientSender(msg string) {
 	msgJson := ChatMessage{Message: msg, User: *user, Color: *color}
 	jsonBytes, _ := json.Marshal(msgJson)
-	hash := passHash(*pass)
-	ph := personalHash()
+
 	// send passHash + personalHash + encrypted message
-	payload := append(append(hash, ph...), encryptToBytes(jsonBytes, []byte(*pass))...)
+	payload := append(append(encypher(passHash(*pass)), encypher(personalHash())...), encryptToBytes(jsonBytes, []byte(*pass))...)
 	responseBytes := sendPacket("msg", payload, *ip)
 	if responseBytes != nil {
 		handleResponse(responseBytes)
@@ -175,7 +175,7 @@ func runClientSender(msg string) {
 func sendHandshake() {
 	ub, _ := json.Marshal(UserBlob{User: *user, Color: *color})
 	blob := encryptToBytes(ub, []byte(*pass))
-	payload := append(append(passHash(*pass), personalHash()...), blob...)
+	payload := append(append(encypher(passHash(*pass)), encypher(personalHash())...), blob...)
 	responseBytes := sendPacket("shake", payload, *ip)
 	if responseBytes == nil {
 		return
@@ -195,7 +195,7 @@ func sendHandshake() {
 			continue
 		}
 		info.Loc = u.Loc
-		mixedHashToUser[u.Hash] = *info
+		mixedHashToUser[string(u.Hash)] = *info
 		bringOnline(u.Hash, *info)
 	}
 	if resp.Total > len(resp.Users) {
@@ -208,7 +208,7 @@ func runClientListener() {
 	for {
 		const chars = "abcdefghij0123456789"
 		salt := []byte(chars)
-		pollPayload := append(append(passHash(*pass), personalHash()...), salt...)
+		pollPayload := append(append(encypher(passHash(*pass)), encypher(personalHash())...), salt...)
 		responseBytes := sendPacket("poll", pollPayload, *ip)
 		if responseBytes != nil {
 			handleResponse(responseBytes)
