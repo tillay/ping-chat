@@ -153,7 +153,6 @@ func listenForPackets() {
 		}
 		result := handlers[sauce](addr, payload)
 		reply := buildPacket(magic, result)
-		fmt.Printf("Replying %s (%d bytes)\n", result, len(reply))
 		reply[0] = 0
 		copy(reply[4:8], buf[4:8])
 		reply[2], reply[3] = 0, 0

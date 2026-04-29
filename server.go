@@ -135,7 +135,9 @@ func getOrCreateRecord(key []byte, ip string) MsgRecord {
 func saveAndReply(record MsgRecord, key []byte) []byte {
 	store[string(key)] = record
 	recordJson, _ := json.Marshal(record)
-	return encryptToBytes(recordJson, key)
+	response := encryptToBytes(recordJson, key)
+	fmt.Printf("Replying %s (%d bytes)\n", recordJson, len(response))
+	return response
 }
 
 func handlePoll(addr net.Addr, payload []byte) []byte {
