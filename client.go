@@ -164,7 +164,7 @@ func runClientSender(msg string) {
 	jsonBytes, _ := json.Marshal(msgJson)
 
 	// send passHash + personalHash + encrypted message
-	payload := append(append(encypher(passHash(*pass)), encypher(personalHash())...), encryptToBytes(jsonBytes, []byte(*pass))...)
+	payload := append(append(passHash(*pass), personalHash()...), encryptToBytes(jsonBytes, []byte(*pass))...)
 	responseBytes := sendPacket("msg", payload, *ip)
 	if responseBytes != nil {
 		handleResponse(responseBytes)
@@ -175,7 +175,7 @@ func runClientSender(msg string) {
 func sendHandshake() {
 	ub, _ := json.Marshal(UserBlob{User: *user, Color: *color})
 	blob := encryptToBytes(ub, []byte(*pass))
-	payload := append(append(encypher(passHash(*pass)), encypher(personalHash())...), blob...)
+	payload := append(append(passHash(*pass), personalHash()...), blob...)
 	responseBytes := sendPacket("shake", payload, *ip)
 	if responseBytes == nil {
 		return
@@ -208,7 +208,7 @@ func runClientListener() {
 	for {
 		const chars = "abcdefghij0123456789"
 		salt := []byte(chars)
-		pollPayload := append(append(encypher(passHash(*pass)), encypher(personalHash())...), salt...)
+		pollPayload := append(append(passHash(*pass), personalHash()...), salt...)
 		responseBytes := sendPacket("poll", pollPayload, *ip)
 		if responseBytes != nil {
 			handleResponse(responseBytes)
