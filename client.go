@@ -37,22 +37,39 @@ var seenNotes = map[string]struct{}{}       // cache of note dedups sent by serv
 var onlineUsers = map[string]userInfo{}     // cache of known users currently online - list of userInfos
 
 func sendInfoPing(dest string) string {
-	return string(sendPacket("info", []byte{}, dest))
+	start := time.Now()
+	result := sendPacket("info", []byte{}, dest)
+	ms := time.Since(start).Milliseconds()
+	return fmt.Sprintf("Pong! %s | %d ms", string(result), ms)
 }
 
-func personalHash() []byte {
-	h := sha256.Sum256(append([]byte(*sign), []byte(*user)...))
-	return h[:16]
+func genHash(sauce string, bytes int) []byte {
+	// ok so mild conundrum here:
+	// if we bake the username and color into the signing hash, then we make it so clients automatically update the sidebar when users change their profile
+	// however, this also means that their hash is invalidated after this change, so it displays a warning to all clients when they change anything
+	// h := sha256.Sum256(append([]byte(*sign), append([]byte(*user), []byte(*color)...)...))
+
+	// on the other hand, not including the username and color in the signature means that other clients can tell that one only changed their profile
+	// and is the same user, but since the hash is the same the server does not know to automatically update their user info
+	// because it doesn't see the change as one user coming online and another going offline at the same time
+	h := sha256.Sum256([]byte(sauce))
+
+	// possible solution: make 8 bytes of the users' signing hash as a steady hash based on their true signature, and the other 8 bytes as a dynamic hash based on their username and color
+	// this means that the server would have to split the user hash into two before mixing and forwarding
+	// and other clients would associate a 'true user id' with the first 8 bytes and know to update the sidebar and such if the last 8 bytes change
+	// the server would emit a 'came online' message, and clients would know whether to add a new user if the first 8 bytes are completely new, or change an existing online user if the first 8 bytes match someone else
+	return h[:bytes]
 }
 
 func bringOnline(hash []byte, u userInfo) {
-	onlineUsers[string(hash)] = u
-	app.QueueUpdateDraw(redrawUserView)
-
 	// the len(firstSeenHash) check checks to make sure it doesn't print before any normal messages (user just joined convo)
 	if u.User != *user && len(firstSeenHash) != 0 {
-		tuiPrint("[slategray]" + u.User + " came online")
+		if _, ok := onlineUsers[string(hash)]; !ok {
+			tuiPrint("[slategray]" + u.User + " came online")
+		}
 	}
+	onlineUsers[string(hash)] = u
+	app.QueueUpdateDraw(redrawUserView)
 }
 
 func bringOffline(hash []byte, u userInfo) {
@@ -164,7 +181,7 @@ func runClientSender(msg string) {
 	jsonBytes, _ := json.Marshal(msgJson)
 
 	// send passHash + personalHash + encrypted message
-	payload := append(append(obfuscate(passHash(*pass)), obfuscate(personalHash())...), encryptToBytes(jsonBytes, []byte(*pass))...)
+	payload := append(append(obfuscate(passHash(*pass)), genHash(*sign, 16)...), encryptToBytes(jsonBytes, []byte(*pass))...)
 	responseBytes := sendPacket("msg", payload, *ip)
 	if responseBytes != nil {
 		handleResponse(responseBytes)
@@ -175,7 +192,7 @@ func runClientSender(msg string) {
 func sendHandshake() {
 	ub, _ := json.Marshal(UserBlob{User: *user, Color: *color})
 	blob := encryptToBytes(ub, []byte(*pass))
-	payload := append(append(obfuscate(passHash(*pass)), obfuscate(personalHash())...), blob...)
+	payload := append(append(obfuscate(passHash(*pass)), genHash(*sign, 16)...), blob...)
 	responseBytes := sendPacket("shake", payload, *ip)
 	if responseBytes == nil {
 		return
@@ -187,7 +204,7 @@ func sendHandshake() {
 	}
 	var resp handshakeResponse
 	if err := json.Unmarshal(decrypted, &resp); err != nil {
-		tuiPrint(err.Error())
+		tuiPrint("[red]" + err.Error() + "[white]")
 	}
 
 	for _, u := range resp.Users {
@@ -209,7 +226,7 @@ func runClientListener() {
 	for {
 		const chars = "abcdefghij0123456789"
 		salt := []byte(chars)
-		pollPayload := append(append(obfuscate(passHash(*pass)), obfuscate(personalHash())...), salt...)
+		pollPayload := append(append(obfuscate(passHash(*pass)), genHash(*sign, 16)...), salt...)
 		responseBytes := sendPacket("poll", pollPayload, *ip)
 		if responseBytes != nil {
 			handleResponse(responseBytes)

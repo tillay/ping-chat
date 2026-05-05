@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -40,13 +39,12 @@ type MsgRecord struct {
 
 var store = map[string]MsgRecord{}
 var locationCache = map[string]map[string]string{}
-var processHash = personalHash()
 
-func mixedHash(processHash []byte, personalHash []byte) []byte {
-	// processHash is changed every time the server is restarted; invalidates old signatures when changed
-	// side effect of making it much harder to reverse sender's signature
-	h := sha256.Sum256(append(processHash, personalHash...))
-	return h[:8]
+func mixedHash(senderSignature []byte) []byte {
+	// the mixedHash is based on the -sign flag used when server is initialized and the signature provided by the sender
+	// this makes it so other clients are unable to spoof other users' signatures
+	// it is worth noting that if the server is compromised and has the password for a convo, then it can spoof any user in that convo
+	return genHash(string(append(genHash(*sign, 16), senderSignature...)), 8)
 }
 
 func dedupHash() string {
@@ -144,11 +142,11 @@ func handlePoll(addr net.Addr, payload []byte) []byte {
 	if len(payload) < 32 {
 		return payload
 	}
-	key, senderMixed := extractHashes(payload)
+	key, senderSignature := extractHashes(payload)
 	record := getOrCreateRecord(key, addr.String())
-	senderMixed = mixedHash(processHash, senderMixed)
-	sweepRecord(&record, senderMixed)
-	fmt.Printf("Incoming polling ping from %s as %x in %x (%d bytes)\n", addr.String(), senderMixed, key, len(payload))
+	senderSignature = mixedHash(senderSignature)
+	sweepRecord(&record, senderSignature)
+	fmt.Printf("Incoming polling ping from %s as %x in %x (%d bytes)\n", addr.String(), senderSignature, key, len(payload))
 	return saveAndReply(record, key)
 }
 
@@ -156,15 +154,15 @@ func handleMessage(addr net.Addr, payload []byte) []byte {
 	if len(payload) < 32 {
 		return payload
 	}
-	key, senderMixed := extractHashes(payload)
+	key, senderSignature := extractHashes(payload)
 	record := getOrCreateRecord(key, addr.String())
-	senderMixed = mixedHash(processHash, senderMixed)
-	fmt.Printf("Incoming message from %s as %x in %x (%d bytes)\n", addr.String(), senderMixed, key, len(payload))
-	sweepRecord(&record, senderMixed)
+	senderSignature = mixedHash(senderSignature)
+	fmt.Printf("Incoming message from %s as %x in %x (%d bytes)\n", addr.String(), senderSignature, key, len(payload))
+	sweepRecord(&record, senderSignature)
 	record.MsgPayload = payload[32:]
 	record.IpLocation = getIpLocation(addr.String())
 	record.MsgTimestamp = time.Now().Unix()
-	record.LastMixedHash = senderMixed
+	record.LastMixedHash = senderSignature
 	return saveAndReply(record, key)
 }
 
@@ -172,17 +170,17 @@ func handleHandshake(addr net.Addr, payload []byte) []byte {
 	if len(payload) < 32 {
 		return payload
 	}
-	key, senderMixed := extractHashes(payload)
+	key, senderSignature := extractHashes(payload)
 	record := getOrCreateRecord(key, addr.String())
-	senderMixed = mixedHash(processHash, senderMixed)
+	senderSignature = mixedHash(senderSignature)
 	userBlob := payload[32:]
-	fmt.Printf("Incoming handshake from %s as %x in %x (%d bytes)\n", addr.String(), senderMixed, key, len(payload))
+	fmt.Printf("Incoming handshake from %s as %x in %x (%d bytes)\n", addr.String(), senderSignature, key, len(payload))
 	loc := getIpLocation(addr.String())
-	u := findUser(&record, senderMixed)
+	u := findUser(&record, senderSignature)
 	if u == nil {
 		// Seen left at zero so sweepRecord sees the user as new and emits an online note
 		record.KnownUsers = append(record.KnownUsers, UserEntry{
-			Hash: senderMixed,
+			Hash: senderSignature,
 			Blob: userBlob,
 			Loc:  loc,
 		})
@@ -191,7 +189,7 @@ func handleHandshake(addr net.Addr, payload []byte) []byte {
 		u.Loc = loc
 		// Seen NOT updated here; sweepRecord will emit an online note if they were away
 	}
-	sweepRecord(&record, senderMixed)
+	sweepRecord(&record, senderSignature)
 	store[string(key)] = record
 
 	active := make([]UserEntry, 0)

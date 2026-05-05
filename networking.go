@@ -99,7 +99,7 @@ func sendPacket(sauce string, data []byte, dest string) []byte {
 		n, addr, netErr := c.ReadFrom(recv)
 		if netErr != nil {
 			if !strings.Contains(netErr.Error(), "timeout") {
-				tuiPrint("Error: " + netErr.Error())
+				tuiPrint("Error: [red]" + netErr.Error() + "[white]")
 			}
 			isMsgOutgoing = false
 			setConnectedStatus(false)

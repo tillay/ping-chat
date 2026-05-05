@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -13,6 +14,23 @@ var (
 	usersView  *tview.TextView
 	statusView *tview.TextView
 )
+
+var commands = map[string]func(args string){
+	"/color": func(inputColor string) {
+		go func() {
+			*color = inputColor
+			sendHandshake()
+			tuiPrint("Set color to [" + inputColor + "]" + inputColor + "[white]")
+		}()
+	},
+	"/name": func(inputName string) {
+		go func() {
+			*user = inputName
+			sendHandshake()
+			tuiPrint("Set name to " + inputName)
+		}()
+	},
+	"/ping": func(_ string) { go func() { tuiPrint(sendInfoPing(*ip)) }() }}
 
 func newView() *tview.TextView {
 	v := tview.NewTextView().SetScrollable(true).SetDynamicColors(true).ScrollToEnd()
@@ -50,12 +68,64 @@ func initTUI(onSend func(string)) {
 			return
 		}
 		text := inputBox.GetText()
+
+		for command := range commands {
+			if strings.HasPrefix(text, command) {
+				commands[command](text[strings.Index(text, " ")+1:])
+				inputBox.SetText("")
+				return
+			}
+		}
+
 		if text == "" || len(text) > 512 || isMsgOutgoing {
 			return
 		}
 		inputBox.SetText("")
 		isMsgOutgoing = true
 		go onSend(text)
+	})
+
+	inputBox.SetAutocompleteStyles(
+		tcell.ColorDefault,
+		tcell.StyleDefault.Background(tcell.ColorDefault).Foreground(tcell.ColorDefault),
+		tcell.StyleDefault.Background(tcell.ColorWhite).Foreground(tcell.ColorBlack),
+	)
+
+	inputBox.SetAutocompleteFunc(func(current string) []string {
+		if !strings.HasPrefix(current, "/") {
+			return nil
+		}
+		var matches []string
+		if strings.HasPrefix(current, "/color") {
+			for color := range tcell.ColorNames {
+				if strings.HasPrefix("/color "+color, current) {
+					matches = append(matches, "/color["+color+"] "+color)
+				}
+			}
+		} else if strings.ReplaceAll(current, " ", "") == "/user" {
+			matches = []string{"/name <new name>"}
+		} else if strings.HasPrefix(current, "/ping") {
+			matches = []string{"/ping"}
+		} else {
+			for c := range commands {
+				if strings.HasPrefix(c, current) {
+					matches = append(matches, c)
+				}
+			}
+		}
+		return matches
+	})
+
+	inputBox.SetAutocompletedFunc(func(text string, index int, source int) bool {
+		if source != tview.AutocompletedNavigate {
+			if i := strings.Index(text, "] "); i != -1 {
+				inputBox.SetText("/color " + text[i+2:])
+			} else {
+				inputBox.SetText(text)
+			}
+			return true
+		}
+		return false
 	})
 
 	inner := tview.NewFlex().SetDirection(tview.FlexRow).
