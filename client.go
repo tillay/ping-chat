@@ -44,20 +44,7 @@ func sendInfoPing(dest string) string {
 }
 
 func genHash(sauce string, bytes int) []byte {
-	// ok so mild conundrum here:
-	// if we bake the username and color into the signing hash, then we make it so clients automatically update the sidebar when users change their profile
-	// however, this also means that their hash is invalidated after this change, so it displays a warning to all clients when they change anything
-	// h := sha256.Sum256(append([]byte(*sign), append([]byte(*user), []byte(*color)...)...))
-
-	// on the other hand, not including the username and color in the signature means that other clients can tell that one only changed their profile
-	// and is the same user, but since the hash is the same the server does not know to automatically update their user info
-	// because it doesn't see the change as one user coming online and another going offline at the same time
 	h := sha256.Sum256([]byte(sauce))
-
-	// possible solution: make 8 bytes of the users' signing hash as a steady hash based on their true signature, and the other 8 bytes as a dynamic hash based on their username and color
-	// this means that the server would have to split the user hash into two before mixing and forwarding
-	// and other clients would associate a 'true user id' with the first 8 bytes and know to update the sidebar and such if the last 8 bytes change
-	// the server would emit a 'came online' message, and clients would know whether to add a new user if the first 8 bytes are completely new, or change an existing online user if the first 8 bytes match someone else
 	return h[:bytes]
 }
 
@@ -80,6 +67,15 @@ func bringOffline(hash []byte, u userInfo) {
 	}
 }
 
+func findOnlineByIdentity(identBytes []byte) []byte {
+	for hash := range onlineUsers {
+		if len(hash) >= 8 && bytes.Equal([]byte(hash)[:8], identBytes) {
+			return []byte(hash)
+		}
+	}
+	return nil
+}
+
 func processNotes(response MsgRecord) {
 	for _, note := range response.PendingNotes {
 		if _, seen := seenNotes[note.DedupHash]; seen {
@@ -94,12 +90,30 @@ func processNotes(response MsgRecord) {
 			}
 			u.Loc = note.Loc
 			mixedHashToUser[string(note.Referent)] = *u
-			if _, isOnline := onlineUsers[string(note.Referent)]; !isOnline {
+			hadOld := false
+			if len(note.Referent) >= 8 {
+				for hash := range onlineUsers {
+					if len(hash) >= 8 && bytes.Equal([]byte(hash)[:8], note.Referent[:8]) && hash != string(note.Referent) {
+						delete(onlineUsers, hash)
+						delete(mixedHashToUser, hash)
+						hadOld = true
+					}
+				}
+			}
+			if _, isOnline := onlineUsers[string(note.Referent)]; isOnline || hadOld {
+				onlineUsers[string(note.Referent)] = *u
+				app.QueueUpdateDraw(redrawUserView)
+			} else {
 				bringOnline(note.Referent, *u)
 			}
 		} else {
 			if u, isOnline := onlineUsers[string(note.Referent)]; isOnline {
 				bringOffline(note.Referent, u)
+			} else if len(note.Referent) >= 8 {
+				if oldHash := findOnlineByIdentity(note.Referent[:8]); oldHash != nil {
+					u := onlineUsers[string(oldHash)]
+					bringOffline(oldHash, u)
+				}
 			}
 		}
 	}
@@ -146,8 +160,10 @@ func handleResponse(responseBytes []byte) {
 		// and also set the user to be online (quietly because it's assuming based only on message recency)
 		if _, seen := firstSeenHash[lastMessage.User]; !seen {
 
-			// it gets to here if this latest hash HASN'T been seen before
-			firstSeenHash[lastMessage.User] = serverResponse.LastMixedHash
+			// it gets to here if this latest hash HASN'T been seen before; store identity bytes only
+			if len(serverResponse.LastMixedHash) >= 8 {
+				firstSeenHash[lastMessage.User] = serverResponse.LastMixedHash[:8]
+			}
 
 			// if the message was sent in the last 20 seconds OR the message was sent by the user, set the sender to online (quietly)
 			if time.Now().Unix()-serverResponse.MsgTimestamp <= 20 || lastMessage.User == *user {
@@ -157,7 +173,6 @@ func handleResponse(responseBytes []byte) {
 				}
 			}
 		}
-
 		// check for any notes from the server
 		// any online or offline updates are printed in this function
 		processNotes(serverResponse)
@@ -167,7 +182,7 @@ func handleResponse(responseBytes []byte) {
 	// this block is run IF THERE IS A NEW MESSAGE
 	if serverResponse.MsgTimestamp != lastTimestamp {
 		if convoIsNotNew {
-			if first := firstSeenHash[lastMessage.User]; !bytes.Equal(first, serverResponse.LastMixedHash) {
+			if first := firstSeenHash[lastMessage.User]; len(serverResponse.LastMixedHash) >= 8 && !bytes.Equal(first, serverResponse.LastMixedHash[:8]) {
 				tuiPrint("[yellow]" + lastMessage.User + " has invalid signature")
 			}
 			tuiPrint("[-:-:-][" + lastMessage.Color + "]" + lastMessage.User + "[-:-:-][white]: " + lastMessage.Message)
@@ -181,7 +196,8 @@ func runClientSender(msg string) {
 	jsonBytes, _ := json.Marshal(msgJson)
 
 	// send passHash + personalHash + encrypted message
-	payload := append(append(obfuscate(passHash(*pass)), genHash(*sign, 16)...), encryptToBytes(jsonBytes, []byte(*pass))...)
+	senderHash := append(genHash(*sign, 8), genHash(*sign+*user+*color, 8)...)
+	payload := append(append(obfuscate(passHash(*pass)), senderHash...), encryptToBytes(jsonBytes, []byte(*pass))...)
 	responseBytes := sendPacket("msg", payload, *ip)
 	if responseBytes != nil {
 		handleResponse(responseBytes)
@@ -192,7 +208,8 @@ func runClientSender(msg string) {
 func sendHandshake() {
 	ub, _ := json.Marshal(UserBlob{User: *user, Color: *color})
 	blob := encryptToBytes(ub, []byte(*pass))
-	payload := append(append(obfuscate(passHash(*pass)), genHash(*sign, 16)...), blob...)
+	senderHash := append(genHash(*sign, 8), genHash(*sign+*user+*color, 8)...)
+	payload := append(append(obfuscate(passHash(*pass)), senderHash...), blob...)
 	responseBytes := sendPacket("shake", payload, *ip)
 	if responseBytes == nil {
 		return
@@ -226,7 +243,8 @@ func runClientListener() {
 	for {
 		const chars = "abcdefghij0123456789"
 		salt := []byte(chars)
-		pollPayload := append(append(obfuscate(passHash(*pass)), genHash(*sign, 16)...), salt...)
+		senderHash := append(genHash(*sign, 8), genHash(*sign+*user+*color, 8)...)
+		pollPayload := append(append(obfuscate(passHash(*pass)), senderHash...), salt...)
 		responseBytes := sendPacket("poll", pollPayload, *ip)
 		if responseBytes != nil {
 			handleResponse(responseBytes)
