@@ -34,7 +34,7 @@ type MsgRecord struct {
 	IpLocation    string      `json:"l"`
 	LastMixedHash []byte      `json:"h"`
 	KnownUsers    []UserEntry `json:"-"`
-	PendingNotes  []NoteEntry `json:"n"`
+	PendingNotes  []NoteEntry `json:"n,omitempty"`
 }
 
 var store = map[string]MsgRecord{}
@@ -78,7 +78,7 @@ func sweepRecord(record *MsgRecord, senderMixed []byte) {
 
 	for i := range record.KnownUsers {
 		u := &record.KnownUsers[i]
-		if now-u.Seen > 2 && now-u.Seen <= 20 {
+		if now-u.Seen > 4 && now-u.Seen <= 8 {
 			purgeNotesForHash(record, u.Hash)
 			record.PendingNotes = append(record.PendingNotes, NoteEntry{
 				DedupHash: dedupHash(),
@@ -90,7 +90,7 @@ func sweepRecord(record *MsgRecord, senderMixed []byte) {
 
 	filtered := make([]NoteEntry, 0, len(record.PendingNotes))
 	for _, n := range record.PendingNotes {
-		if now-n.CreatedAt <= 20 {
+		if now-n.CreatedAt <= 8 {
 			filtered = append(filtered, n)
 		}
 	}
@@ -98,7 +98,7 @@ func sweepRecord(record *MsgRecord, senderMixed []byte) {
 
 	u := findUser(record, senderMixed)
 	profileChanged := u != nil && !bytes.Equal(u.Hash, senderMixed)
-	if u == nil || now-u.Seen > 2 || profileChanged {
+	if u == nil || now-u.Seen > 4 || profileChanged {
 		if profileChanged {
 			purgeNotesForHash(record, u.Hash)
 			u.Hash = senderMixed
@@ -137,12 +137,12 @@ func getOrCreateRecord(key []byte, ip string) MsgRecord {
 	return record
 }
 
-func saveAndReply(record MsgRecord, key []byte) []byte {
+// at some point I should bother making this code...better
+func saveAndReply(record MsgRecord, key []byte) (string, []byte) {
 	store[string(key)] = record
 	recordJson, _ := json.Marshal(record)
 	response := encryptToBytes(recordJson, key)
-	fmt.Printf("Replying %s (%d bytes)\n", recordJson, len(response))
-	return response
+	return string(recordJson), response
 }
 
 func handlePoll(addr net.Addr, payload []byte) []byte {
@@ -153,8 +153,9 @@ func handlePoll(addr net.Addr, payload []byte) []byte {
 	record := getOrCreateRecord(key, addr.String())
 	senderMixed := append(mixedHash(senderSignature[:8]), mixedHash(senderSignature[8:])...)
 	sweepRecord(&record, senderMixed)
-	fmt.Printf("Incoming polling ping from %s as %x in %x (%d bytes)\n", addr.String(), senderMixed, key, len(payload))
-	return saveAndReply(record, key)
+	// fmt.Printf("\nIncoming polling ping from %s as %x in %x (%d bytes)\n", addr.String(), senderMixed, key, len(payload))
+	_, respBytes := saveAndReply(record, key)
+	return respBytes
 }
 
 func handleMessage(addr net.Addr, payload []byte) []byte {
@@ -164,13 +165,16 @@ func handleMessage(addr net.Addr, payload []byte) []byte {
 	key, senderSignature := extractHashes(payload)
 	record := getOrCreateRecord(key, addr.String())
 	senderMixed := append(mixedHash(senderSignature[:8]), mixedHash(senderSignature[8:])...)
+	fmt.Println("\n" + formatTimestamp(time.Now().Unix()))
 	fmt.Printf("Incoming message from %s as %x in %x (%d bytes)\n", addr.String(), senderMixed, key, len(payload))
 	sweepRecord(&record, senderMixed)
 	record.MsgPayload = payload[32:]
 	record.IpLocation = getIpLocation(addr.String())
 	record.MsgTimestamp = time.Now().Unix()
 	record.LastMixedHash = senderMixed
-	return saveAndReply(record, key)
+	resp, respBytes := saveAndReply(record, key)
+	fmt.Printf("Replying %s (%d bytes)\n", resp, len(respBytes))
+	return respBytes
 }
 
 func handleHandshake(addr net.Addr, payload []byte) []byte {
@@ -181,6 +185,7 @@ func handleHandshake(addr net.Addr, payload []byte) []byte {
 	record := getOrCreateRecord(key, addr.String())
 	senderMixed := append(mixedHash(senderSignature[:8]), mixedHash(senderSignature[8:])...)
 	userBlob := payload[32:]
+	fmt.Println("\n" + formatTimestamp(time.Now().Unix()))
 	fmt.Printf("Incoming handshake from %s as %x in %x (%d bytes)\n", addr.String(), senderMixed, key, len(payload))
 	loc := getIpLocation(addr.String())
 	u := findUser(&record, senderMixed)
@@ -221,7 +226,9 @@ func handleHandshake(addr net.Addr, payload []byte) []byte {
 		Total: totalActive,
 		Users: active,
 	})
-	return encryptToBytes(resp, key)
+	respBytes := encryptToBytes(resp, key)
+	fmt.Printf("Replying %s (%d bytes)\n", resp, len(respBytes))
+	return respBytes
 }
 
 func getIpData(ip string) map[string]string {
@@ -245,7 +252,8 @@ func getIpLocation(ip string) string {
 }
 
 func handleInfoPing(addr net.Addr, payload []byte) []byte {
-	fmt.Printf("Incoming handshake from %s (%d bytes)\n", addr.String(), len(payload))
+	fmt.Println("\n" + formatTimestamp(time.Now().Unix()))
+	fmt.Printf("Incoming ping from %s (%d bytes)", addr.String(), len(payload))
 	info := getIpData(addr.String())
 	org := info["org"]
 	if idx := strings.Index(org, " "); idx != -1 {

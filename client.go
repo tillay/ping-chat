@@ -164,17 +164,11 @@ func handleResponse(responseBytes []byte) {
 			if len(serverResponse.LastMixedHash) >= 8 {
 				firstSeenHash[lastMessage.User] = serverResponse.LastMixedHash[:8]
 			}
-
-			// if the message was sent in the last 20 seconds OR the message was sent by the user, set the sender to online (quietly)
-			if time.Now().Unix()-serverResponse.MsgTimestamp <= 20 || lastMessage.User == *user {
-				if _, online := onlineUsers[string(serverResponse.LastMixedHash)]; !online {
-					onlineUsers[string(serverResponse.LastMixedHash)] = userInfo{lastMessage.Color, lastMessage.User, serverResponse.IpLocation}
-					app.QueueUpdateDraw(redrawUserView)
-				}
-			}
 		}
 		// check for any notes from the server
 		// any online or offline updates are printed in this function
+		processNotes(serverResponse)
+	} else if len(serverResponse.PendingNotes) > 0 {
 		processNotes(serverResponse)
 	}
 
@@ -186,6 +180,9 @@ func handleResponse(responseBytes []byte) {
 				tuiPrint("[yellow]" + lastMessage.User + " has invalid signature")
 			}
 			tuiPrint("[-:-:-][" + lastMessage.Color + "]" + lastMessage.User + "[-:-:-][white]: " + lastMessage.Message)
+			if lastMessage.User != *user {
+				fmt.Printf("\a") // make notification sound for funsies
+			}
 		}
 		lastTimestamp = serverResponse.MsgTimestamp
 	}
@@ -251,9 +248,4 @@ func runClientListener() {
 		}
 		time.Sleep(time.Duration(160+rand.IntN(161)) * time.Millisecond)
 	}
-}
-
-func formatTimestamp(ts int64) string {
-	t := time.Unix(ts, 0)
-	return fmt.Sprintf("%d. %s %d, %02d:%02d", t.Day(), t.Month().String(), t.Year(), t.Hour(), t.Minute())
 }

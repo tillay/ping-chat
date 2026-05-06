@@ -162,6 +162,11 @@ func listenForPackets() {
 	}
 }
 
+func formatTimestamp(ts int64) string {
+	t := time.Unix(ts, 0)
+	return fmt.Sprintf("%d. %s %d, %02d:%02d", t.Day(), t.Month().String(), t.Year(), t.Hour(), t.Minute())
+}
+
 func processErr(err error) {
 	if err != nil {
 		if strings.Contains(err.Error(), "operation not permitted") {

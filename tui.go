@@ -15,6 +15,9 @@ var (
 	statusView *tview.TextView
 )
 
+// dict of valid slash commands
+// string name -> func to execute on command execution
+// the input string to the function is any additional args after the command itself
 var commands = map[string]func(args string){
 	"/color": func(inputColor string) {
 		go func() {
@@ -30,7 +33,17 @@ var commands = map[string]func(args string){
 			tuiPrint("Set name to " + inputName)
 		}()
 	},
-	"/ping": func(_ string) { go func() { tuiPrint(sendInfoPing(*ip)) }() }}
+	"/ping": func(_ string) {
+		go func() {
+			tuiPrint(sendInfoPing(*ip))
+		}()
+	},
+	"/clear": func(_ string) {
+		go func() {
+			msgView.SetText("")
+		}()
+	},
+}
 
 func newView() *tview.TextView {
 	v := tview.NewTextView().SetScrollable(true).SetDynamicColors(true).ScrollToEnd()
@@ -102,10 +115,8 @@ func initTUI(onSend func(string)) {
 					matches = append(matches, "/color["+color+"] "+color)
 				}
 			}
-		} else if strings.ReplaceAll(current, " ", "") == "/user" {
+		} else if strings.ReplaceAll(current, " ", "") == "/name" {
 			matches = []string{"/name <new name>"}
-		} else if strings.HasPrefix(current, "/ping") {
-			matches = []string{"/ping"}
 		} else {
 			for c := range commands {
 				if strings.HasPrefix(c, current) {
