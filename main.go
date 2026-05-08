@@ -22,11 +22,10 @@ func main() {
 	flag.Parse()
 	if *server {
 		if *salt == "" {
-			fmt.Println("Error: you must specify a signature with -sign to prevent impersonation")
+			fmt.Println("Error: you must specify a signature with -salt to prevent impersonation")
 			return
 		}
 		enableKernelReplies(false)
-		listenForPackets()
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 		go func() {
@@ -34,6 +33,7 @@ func main() {
 			enableKernelReplies(true)
 			os.Exit(0)
 		}()
+		listenForPackets()
 	} else {
 		User = loadConfig(*force)
 		saveConfig(User)

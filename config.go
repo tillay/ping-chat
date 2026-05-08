@@ -48,7 +48,7 @@ func promptConfig() Config {
 	name, _ := reader.ReadString('\n')
 	name = strings.TrimSpace(name)
 
-	fmt.Print("Color (hex or name): ")
+	fmt.Print("Name color: ")
 	color, _ := reader.ReadString('\n')
 	color = strings.TrimSpace(color)
 
