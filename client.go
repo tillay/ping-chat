@@ -50,7 +50,7 @@ func genHash(sauce string, bytes int) []byte {
 
 func bringOnline(hash []byte, u userInfo) {
 	// the len(firstSeenHash) check checks to make sure it doesn't print before any normal messages (user just joined convo)
-	if u.User != *user && len(firstSeenHash) != 0 {
+	if u.User != User.Name && len(firstSeenHash) != 0 {
 		if _, ok := onlineUsers[string(hash)]; !ok {
 			tuiPrint("[slategray]" + u.User + " came online")
 		}
@@ -125,7 +125,7 @@ func handleResponse(responseBytes []byte) {
 	defer mu.Unlock()
 
 	// decrypt the message encrypted by the server using the hash of the password
-	responseStr := decryptFromBytes(responseBytes, deobfuscate(obfuscate(passHash(*pass))))
+	responseStr := decryptFromBytes(responseBytes, deobfuscate(obfuscate(passHash(User.Password))))
 	var serverResponse MsgRecord
 	if err := json.Unmarshal(responseStr, &serverResponse); err != nil {
 		return
@@ -134,7 +134,7 @@ func handleResponse(responseBytes []byte) {
 	var lastMessage ChatMessage
 
 	// now decrypt the internal message originally sent by the other client
-	msgTextStr := decryptUsingPass(serverResponse.MsgPayload, *pass)
+	msgTextStr := decryptUsingPass(serverResponse.MsgPayload, User.Password)
 	json.Unmarshal([]byte(msgTextStr), &lastMessage)
 
 	convoIsNotNew := serverResponse.LastMixedHash != nil && lastMessage.User != ""
@@ -180,7 +180,7 @@ func handleResponse(responseBytes []byte) {
 				tuiPrint("[yellow]" + lastMessage.User + " has invalid signature")
 			}
 			tuiPrint("[-:-:-][" + lastMessage.Color + "]" + lastMessage.User + "[-:-:-][white]: " + lastMessage.Message)
-			if lastMessage.User != *user {
+			if lastMessage.User != User.Name {
 				fmt.Printf("\a") // make notification sound for funsies
 			}
 		}
@@ -189,13 +189,13 @@ func handleResponse(responseBytes []byte) {
 }
 
 func runClientSender(msg string) {
-	msgJson := ChatMessage{Message: msg, User: *user, Color: *color}
+	msgJson := ChatMessage{Message: msg, User: User.Name, Color: User.Color}
 	jsonBytes, _ := json.Marshal(msgJson)
 
 	// send passHash + personalHash + encrypted message
-	senderHash := append(genHash(*sign, 8), genHash(*sign+*user+*color, 8)...)
-	payload := append(append(obfuscate(passHash(*pass)), senderHash...), encryptToBytes(jsonBytes, []byte(*pass))...)
-	responseBytes := sendPacket("msg", payload, *ip)
+	senderHash := append(genHash(User.Signature, 8), genHash(User.Signature+User.Name+User.Color, 8)...)
+	payload := append(append(obfuscate(passHash(User.Password)), senderHash...), encryptToBytes(jsonBytes, []byte(User.Password))...)
+	responseBytes := sendPacket("msg", payload, User.ServerIP)
 	if responseBytes != nil {
 		handleResponse(responseBytes)
 		isMsgOutgoing = false
@@ -203,15 +203,15 @@ func runClientSender(msg string) {
 }
 
 func sendHandshake() {
-	ub, _ := json.Marshal(UserBlob{User: *user, Color: *color})
-	blob := encryptToBytes(ub, []byte(*pass))
-	senderHash := append(genHash(*sign, 8), genHash(*sign+*user+*color, 8)...)
-	payload := append(append(obfuscate(passHash(*pass)), senderHash...), blob...)
-	responseBytes := sendPacket("shake", payload, *ip)
+	ub, _ := json.Marshal(UserBlob{User: User.Name, Color: User.Color})
+	blob := encryptToBytes(ub, []byte(User.Password))
+	senderHash := append(genHash(User.Signature, 8), genHash(User.Signature+User.Name+User.Color, 8)...)
+	payload := append(append(obfuscate(passHash(User.Password)), senderHash...), blob...)
+	responseBytes := sendPacket("shake", payload, User.ServerIP)
 	if responseBytes == nil {
 		return
 	}
-	decrypted := decryptFromBytes(responseBytes, deobfuscate(obfuscate(passHash(*pass))))
+	decrypted := decryptFromBytes(responseBytes, deobfuscate(obfuscate(passHash(User.Password))))
 	type handshakeResponse struct {
 		Total int         `json:"t"`
 		Users []UserEntry `json:"u"`
@@ -240,9 +240,9 @@ func runClientListener() {
 	for {
 		const chars = "abcdefghij0123456789"
 		salt := []byte(chars)
-		senderHash := append(genHash(*sign, 8), genHash(*sign+*user+*color, 8)...)
-		pollPayload := append(append(obfuscate(passHash(*pass)), senderHash...), salt...)
-		responseBytes := sendPacket("poll", pollPayload, *ip)
+		senderHash := append(genHash(User.Signature, 8), genHash(User.Signature+User.Name+User.Color, 8)...)
+		pollPayload := append(append(obfuscate(passHash(User.Password)), senderHash...), salt...)
+		responseBytes := sendPacket("poll", pollPayload, User.ServerIP)
 		if responseBytes != nil {
 			handleResponse(responseBytes)
 		}

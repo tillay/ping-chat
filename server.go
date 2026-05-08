@@ -41,10 +41,10 @@ var store = map[string]MsgRecord{}
 var locationCache = map[string]map[string]string{}
 
 func mixedHash(senderSignature []byte) []byte {
-	// the mixedHash is based on the -sign flag used when server is initialized and the signature provided by the sender
+	// the mixedHash is based on the -salt flag used when server is initialized and the signature provided by the sender
 	// this makes it so other clients are unable to spoof other users' signatures
 	// it is worth noting that if the server is compromised and has the password for a convo, then it can spoof any user in that convo
-	return genHash(string(append(genHash(*sign, 16), senderSignature...)), 8)
+	return genHash(string(append(genHash(*salt, 16), senderSignature...)), 8)
 }
 
 func dedupHash() string {

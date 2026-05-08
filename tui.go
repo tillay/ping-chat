@@ -21,21 +21,23 @@ var (
 var commands = map[string]func(args string){
 	"/color": func(inputColor string) {
 		go func() {
-			*color = inputColor
+			User.Color = inputColor
 			sendHandshake()
+			saveConfig(User)
 			tuiPrint("Set color to [" + inputColor + "]" + inputColor + "[white]")
 		}()
 	},
 	"/name": func(inputName string) {
 		go func() {
-			*user = inputName
+			User.Name = inputName
 			sendHandshake()
+			saveConfig(User)
 			tuiPrint("Set name to " + inputName)
 		}()
 	},
 	"/ping": func(_ string) {
 		go func() {
-			tuiPrint(sendInfoPing(*ip))
+			tuiPrint(sendInfoPing(User.ServerIP))
 		}()
 	},
 	"/clear": func(_ string) {

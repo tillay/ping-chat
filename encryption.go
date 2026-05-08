@@ -64,7 +64,7 @@ func decryptUsingPass(data []byte, pass string) string {
 }
 
 func decryptUserBlob(blob []byte) *userInfo {
-	plain := decryptUsingPass(blob, *pass)
+	plain := decryptUsingPass(blob, User.Password)
 	var ub UserBlob
 	if err := json.Unmarshal([]byte(plain), &ub); err != nil {
 		return nil
