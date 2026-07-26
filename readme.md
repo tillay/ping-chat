@@ -45,3 +45,5 @@ sudo ./pingchat -server -salt <keyboard mashing>
 | `-salt`   | Server  | Salt that the server uses for anti-impersonation |
 | `-login`  | Client  | Force re-configuration of user config info       |
 | `-path`   | Client  | Path to config file to load or write to          |
+
+![](https://api.tilley.lol/log/pingchat)
